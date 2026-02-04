@@ -7,6 +7,18 @@ export const SCHEDULER_POLL_INTERVAL = 60000;
 // Telegram Bot Configuration
 export const TELEGRAM_BOT_TOKEN = process.env.TELEGRAM_BOT_TOKEN || '';
 
+// Validate required environment variables at import time
+if (!TELEGRAM_BOT_TOKEN) {
+  console.error('╔══════════════════════════════════════════════════════════════╗');
+  console.error('║  ERROR: TELEGRAM_BOT_TOKEN is required                       ║');
+  console.error('╟──────────────────────────────────────────────────────────────╢');
+  console.error('║  1. Get a token from @BotFather on Telegram                  ║');
+  console.error('║  2. Create .env: echo "TELEGRAM_BOT_TOKEN=xxx" > .env        ║');
+  console.error('║  3. Run: npm run setup:telegram                              ║');
+  console.error('╚══════════════════════════════════════════════════════════════╝');
+  process.exit(1);
+}
+
 // Absolute paths needed for container mounts
 const PROJECT_ROOT = process.cwd();
 const HOME_DIR = process.env.HOME || '/Users/user';

@@ -97,6 +97,56 @@ function registerGroup(chatId: string, group: RegisteredGroup): void {
 }
 
 // ============================================================================
+// Media Cleanup
+// ============================================================================
+
+const MEDIA_MAX_AGE_DAYS = 7; // Delete media files older than 7 days
+const MEDIA_CLEANUP_INTERVAL = 6 * 60 * 60 * 1000; // Run cleanup every 6 hours
+
+function cleanupOldMedia(): void {
+  const now = Date.now();
+  const maxAge = MEDIA_MAX_AGE_DAYS * 24 * 60 * 60 * 1000;
+  let deletedCount = 0;
+
+  try {
+    // Iterate through all group folders
+    const groupFolders = fs.readdirSync(GROUPS_DIR);
+    for (const folder of groupFolders) {
+      const mediaDir = path.join(GROUPS_DIR, folder, 'media');
+      if (!fs.existsSync(mediaDir)) continue;
+
+      const files = fs.readdirSync(mediaDir);
+      for (const file of files) {
+        const filePath = path.join(mediaDir, file);
+        try {
+          const stats = fs.statSync(filePath);
+          if (now - stats.mtimeMs > maxAge) {
+            fs.unlinkSync(filePath);
+            deletedCount++;
+          }
+        } catch {
+          // Ignore individual file errors
+        }
+      }
+    }
+
+    if (deletedCount > 0) {
+      logger.info({ deletedCount }, 'Old media files cleaned up');
+    }
+  } catch (err) {
+    logger.error({ err }, 'Error during media cleanup');
+  }
+}
+
+function startMediaCleanupScheduler(): void {
+  // Run immediately on startup
+  cleanupOldMedia();
+  // Then run periodically
+  setInterval(cleanupOldMedia, MEDIA_CLEANUP_INTERVAL);
+  logger.info({ intervalHours: MEDIA_CLEANUP_INTERVAL / 3600000 }, 'Media cleanup scheduler started');
+}
+
+// ============================================================================
 // Media Handling
 // ============================================================================
 
@@ -762,6 +812,7 @@ async function connectTelegram(): Promise<void> {
     getSessions: () => sessions,
   });
   startIpcWatcher();
+  startMediaCleanupScheduler();
 
   console.log(`\n✓ NanoGemClaw running (trigger: @${ASSISTANT_NAME})`);
   console.log(`  Bot: @${me.username}`);
