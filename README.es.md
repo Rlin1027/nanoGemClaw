@@ -62,9 +62,11 @@ brew install --cask docker   # macOS
 
 ```bash
 git clone https://github.com/Rlin1027/NanoGemClaw.git
-cd NanoGemClaw
+cd NanoGemClaw   # Importante: ¡Entra en la carpeta del proyecto!
 npm install
 ```
+
+> ⚠️ **Nota**: `git clone` crea una carpeta llamada `NanoGemClaw`. Todos los comandos deben ejecutarse dentro de esta carpeta.
 
 ---
 
