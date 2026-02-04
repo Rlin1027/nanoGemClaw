@@ -1,12 +1,18 @@
 /**
- * NanoClaw Agent Runner
- * Runs inside a container, receives config via stdin, outputs result to stdout
+ * NanoGemClaw Agent Runner
+ * Runs Gemini CLI inside a container via spawn, receives config via stdin, outputs result to stdout
+ * 
+ * This replaces the Claude Agent SDK with Gemini CLI headless mode
  */
 
+import { spawn } from 'child_process';
 import fs from 'fs';
 import path from 'path';
-import { query, HookCallback, PreCompactHookInput } from '@anthropic-ai/claude-agent-sdk';
-import { createIpcMcp } from './ipc-mcp.js';
+import { writeIpcFile, IPC_DIR, MESSAGES_DIR, TASKS_DIR } from './ipc-tools.js';
+
+// ============================================================================
+// Types
+// ============================================================================
 
 interface ContainerInput {
   prompt: string;
@@ -24,26 +30,24 @@ interface ContainerOutput {
   error?: string;
 }
 
-interface SessionEntry {
-  sessionId: string;
-  fullPath: string;
-  summary: string;
-  firstPrompt: string;
+interface StreamEvent {
+  type: 'init' | 'message' | 'tool_use' | 'tool_result' | 'error' | 'result';
+  timestamp?: string;
+  session_id?: string;
+  model?: string;
+  role?: 'user' | 'assistant';
+  content?: string;
+  tool_name?: string;
+  tool_id?: string;
+  parameters?: Record<string, unknown>;
+  status?: string;
+  output?: string;
+  stats?: Record<string, unknown>;
 }
 
-interface SessionsIndex {
-  entries: SessionEntry[];
-}
-
-async function readStdin(): Promise<string> {
-  return new Promise((resolve, reject) => {
-    let data = '';
-    process.stdin.setEncoding('utf8');
-    process.stdin.on('data', chunk => { data += chunk; });
-    process.stdin.on('end', () => resolve(data));
-    process.stdin.on('error', reject);
-  });
-}
+// ============================================================================
+// Output Handling
+// ============================================================================
 
 const OUTPUT_START_MARKER = '---NANOCLAW_OUTPUT_START---';
 const OUTPUT_END_MARKER = '---NANOCLAW_OUTPUT_END---';
@@ -58,147 +62,249 @@ function log(message: string): void {
   console.error(`[agent-runner] ${message}`);
 }
 
-function getSessionSummary(sessionId: string, transcriptPath: string): string | null {
-  // sessions-index.json is in the same directory as the transcript
-  const projectDir = path.dirname(transcriptPath);
-  const indexPath = path.join(projectDir, 'sessions-index.json');
+// ============================================================================
+// Stdin Reading
+// ============================================================================
 
-  if (!fs.existsSync(indexPath)) {
-    log(`Sessions index not found at ${indexPath}`);
-    return null;
-  }
-
-  try {
-    const index: SessionsIndex = JSON.parse(fs.readFileSync(indexPath, 'utf-8'));
-    const entry = index.entries.find(e => e.sessionId === sessionId);
-    if (entry?.summary) {
-      return entry.summary;
-    }
-  } catch (err) {
-    log(`Failed to read sessions index: ${err instanceof Error ? err.message : String(err)}`);
-  }
-
-  return null;
+async function readStdin(): Promise<string> {
+  return new Promise((resolve, reject) => {
+    let data = '';
+    process.stdin.setEncoding('utf8');
+    process.stdin.on('data', chunk => { data += chunk; });
+    process.stdin.on('end', () => resolve(data));
+    process.stdin.on('error', reject);
+  });
 }
 
-/**
- * Archive the full transcript to conversations/ before compaction.
- */
-function createPreCompactHook(): HookCallback {
-  return async (input, _toolUseId, _context) => {
-    const preCompact = input as PreCompactHookInput;
-    const transcriptPath = preCompact.transcript_path;
-    const sessionId = preCompact.session_id;
+// ============================================================================
+// Gemini CLI Wrapper
+// ============================================================================
 
-    if (!transcriptPath || !fs.existsSync(transcriptPath)) {
-      log('No transcript found for archiving');
-      return {};
-    }
+async function runGeminiAgent(input: ContainerInput): Promise<ContainerOutput> {
+  const args: string[] = [];
 
-    try {
-      const content = fs.readFileSync(transcriptPath, 'utf-8');
-      const messages = parseTranscript(content);
+  // Build prompt with context
+  let prompt = input.prompt;
+  if (input.isScheduledTask) {
+    prompt = `[SCHEDULED TASK - You are running automatically, not in response to a user message. Use the send_message tool if needed to communicate with the user.]\n\n${input.prompt}`;
+  }
 
-      if (messages.length === 0) {
-        log('No messages to archive');
-        return {};
+  // Add system context about available IPC tools
+  const systemContext = buildSystemContext(input);
+  prompt = `${systemContext}\n\n---\n\nUser Request:\n${prompt}`;
+
+  // Gemini CLI arguments
+  args.push('-p', prompt);
+  args.push('--output-format', 'stream-json');
+  args.push('--yolo');  // Auto-approve all tool calls (like bypassPermissions)
+
+  // Resume session if provided
+  if (input.sessionId) {
+    args.push('--resume', input.sessionId);
+  }
+
+  // Use fast model for efficiency
+  args.push('-m', 'gemini-2.5-flash');
+
+  log(`Running: gemini ${args.slice(0, 4).join(' ')}...`);
+
+  return new Promise((resolve) => {
+    const startTime = Date.now();
+    
+    const gemini = spawn('gemini', args, {
+      cwd: '/workspace/group',
+      env: {
+        ...process.env,
+        HOME: '/home/node',
+        GEMINI_API_KEY: process.env.GEMINI_API_KEY || process.env.GOOGLE_API_KEY,
+      },
+      stdio: ['pipe', 'pipe', 'pipe'],
+    });
+
+    let stdout = '';
+    let stderr = '';
+    let sessionId: string | undefined;
+    let lastResponse: string | null = null;
+
+    gemini.stdout.on('data', (data) => {
+      const chunk = data.toString();
+      stdout += chunk;
+
+      // Parse streaming events
+      const lines = chunk.split('\n').filter((l: string) => l.trim());
+      for (const line of lines) {
+        try {
+          const event: StreamEvent = JSON.parse(line);
+          
+          // Capture session ID from init event
+          if (event.type === 'init' && event.session_id) {
+            sessionId = event.session_id;
+            log(`Session: ${sessionId}`);
+          }
+          
+          // Capture assistant response
+          if (event.type === 'message' && event.role === 'assistant' && event.content) {
+            lastResponse = event.content;
+          }
+
+          // Log tool usage
+          if (event.type === 'tool_use') {
+            log(`Tool: ${event.tool_name}`);
+          }
+        } catch {
+          // Not JSON, skip
+        }
+      }
+    });
+
+    gemini.stderr.on('data', (data) => {
+      stderr += data.toString();
+      // Log stderr but keep it brief
+      const lines = data.toString().trim().split('\n');
+      for (const line of lines.slice(-3)) {
+        if (line && !line.includes('Session cleanup disabled')) {
+          log(line.slice(0, 200));
+        }
+      }
+    });
+
+    // Timeout handling
+    const timeout = setTimeout(() => {
+      gemini.kill('SIGKILL');
+      resolve({
+        status: 'error',
+        result: null,
+        error: 'Agent timed out after 5 minutes',
+      });
+    }, 5 * 60 * 1000);
+
+    gemini.on('close', (code) => {
+      clearTimeout(timeout);
+      const durationMs = Date.now() - startTime;
+
+      if (code !== 0) {
+        log(`Exit code ${code} after ${durationMs}ms`);
+        resolve({
+          status: 'error',
+          result: null,
+          newSessionId: sessionId,
+          error: `Exit code ${code}: ${stderr.slice(-200)}`,
+        });
+        return;
       }
 
-      const summary = getSessionSummary(sessionId, transcriptPath);
-      const name = summary ? sanitizeFilename(summary) : generateFallbackName();
+      // Extract response from events
+      let response = lastResponse;
+      
+      // Fallback: try parsing last line as JSON
+      if (!response) {
+        const lines = stdout.trim().split('\n');
+        for (let i = lines.length - 1; i >= 0; i--) {
+          try {
+            const event = JSON.parse(lines[i]);
+            if (event.response) {
+              response = event.response;
+              break;
+            }
+            if (event.type === 'message' && event.role === 'assistant') {
+              response = event.content;
+              break;
+            }
+          } catch {
+            continue;
+          }
+        }
+      }
 
-      const conversationsDir = '/workspace/group/conversations';
-      fs.mkdirSync(conversationsDir, { recursive: true });
+      log(`Completed in ${durationMs}ms`);
+      
+      resolve({
+        status: 'success',
+        result: response,
+        newSessionId: sessionId,
+      });
+    });
 
-      const date = new Date().toISOString().split('T')[0];
-      const filename = `${date}-${name}.md`;
-      const filePath = path.join(conversationsDir, filename);
-
-      const markdown = formatTranscriptMarkdown(messages, summary);
-      fs.writeFileSync(filePath, markdown);
-
-      log(`Archived conversation to ${filePath}`);
-    } catch (err) {
-      log(`Failed to archive transcript: ${err instanceof Error ? err.message : String(err)}`);
-    }
-
-    return {};
-  };
+    gemini.on('error', (err) => {
+      clearTimeout(timeout);
+      log(`Spawn error: ${err.message}`);
+      resolve({
+        status: 'error',
+        result: null,
+        error: `Spawn error: ${err.message}`,
+      });
+    });
+  });
 }
 
-function sanitizeFilename(summary: string): string {
-  return summary
-    .toLowerCase()
-    .replace(/[^a-z0-9]+/g, '-')
-    .replace(/^-+|-+$/g, '')
-    .slice(0, 50);
-}
+// ============================================================================
+// System Context for IPC Tools
+// ============================================================================
 
-function generateFallbackName(): string {
-  const time = new Date();
-  return `conversation-${time.getHours().toString().padStart(2, '0')}${time.getMinutes().toString().padStart(2, '0')}`;
-}
-
-interface ParsedMessage {
-  role: 'user' | 'assistant';
-  content: string;
-}
-
-function parseTranscript(content: string): ParsedMessage[] {
-  const messages: ParsedMessage[] = [];
-
-  for (const line of content.split('\n')) {
-    if (!line.trim()) continue;
+function buildSystemContext(input: ContainerInput): string {
+  const { groupFolder, chatJid, isMain } = input;
+  
+  // Read available tasks
+  let tasksInfo = '';
+  const tasksFile = path.join(IPC_DIR, 'current_tasks.json');
+  if (fs.existsSync(tasksFile)) {
     try {
-      const entry = JSON.parse(line);
-      if (entry.type === 'user' && entry.message?.content) {
-        const text = typeof entry.message.content === 'string'
-          ? entry.message.content
-          : entry.message.content.map((c: { text?: string }) => c.text || '').join('');
-        if (text) messages.push({ role: 'user', content: text });
-      } else if (entry.type === 'assistant' && entry.message?.content) {
-        const textParts = entry.message.content
-          .filter((c: { type: string }) => c.type === 'text')
-          .map((c: { text: string }) => c.text);
-        const text = textParts.join('');
-        if (text) messages.push({ role: 'assistant', content: text });
+      const tasks = JSON.parse(fs.readFileSync(tasksFile, 'utf-8'));
+      const filteredTasks = isMain ? tasks : tasks.filter((t: { groupFolder: string }) => t.groupFolder === groupFolder);
+      if (filteredTasks.length > 0) {
+        tasksInfo = `\n\nCurrent scheduled tasks:\n${JSON.stringify(filteredTasks, null, 2)}`;
       }
     } catch {
+      // Ignore
     }
   }
 
-  return messages;
-}
-
-function formatTranscriptMarkdown(messages: ParsedMessage[], title?: string | null): string {
-  const now = new Date();
-  const formatDateTime = (d: Date) => d.toLocaleString('en-US', {
-    month: 'short',
-    day: 'numeric',
-    hour: 'numeric',
-    minute: '2-digit',
-    hour12: true
-  });
-
-  const lines: string[] = [];
-  lines.push(`# ${title || 'Conversation'}`);
-  lines.push('');
-  lines.push(`Archived: ${formatDateTime(now)}`);
-  lines.push('');
-  lines.push('---');
-  lines.push('');
-
-  for (const msg of messages) {
-    const sender = msg.role === 'user' ? 'User' : 'Andy';
-    const content = msg.content.length > 2000
-      ? msg.content.slice(0, 2000) + '...'
-      : msg.content;
-    lines.push(`**${sender}**: ${content}`);
-    lines.push('');
+  // Read available groups (main only)
+  let groupsInfo = '';
+  if (isMain) {
+    const groupsFile = path.join(IPC_DIR, 'available_groups.json');
+    if (fs.existsSync(groupsFile)) {
+      try {
+        const data = JSON.parse(fs.readFileSync(groupsFile, 'utf-8'));
+        if (data.groups && data.groups.length > 0) {
+          groupsInfo = `\n\nAvailable WhatsApp groups:\n${JSON.stringify(data.groups.slice(0, 10), null, 2)}`;
+        }
+      } catch {
+        // Ignore
+      }
+    }
   }
 
-  return lines.join('\n');
+  return `You are an AI assistant for NanoGemClaw. You are helping with the "${groupFolder}" group.
+
+IMPORTANT: To interact with the messaging system, you must write JSON files to specific directories:
+
+1. TO SEND A MESSAGE - Write to /workspace/ipc/messages/:
+   {"type":"message","chatJid":"${chatJid}","text":"your message","timestamp":"..."}
+
+2. TO SCHEDULE A TASK - Write to /workspace/ipc/tasks/:
+   {"type":"schedule_task","prompt":"what to do","schedule_type":"cron|interval|once","schedule_value":"...","groupFolder":"${groupFolder}","chatJid":"${chatJid}"}
+
+3. TO MANAGE TASKS - Write to /workspace/ipc/tasks/:
+   {"type":"pause_task","taskId":"..."}
+   {"type":"resume_task","taskId":"..."}
+   {"type":"cancel_task","taskId":"..."}
+
+${isMain ? `4. TO REGISTER A GROUP (main only) - Write to /workspace/ipc/tasks/:
+   {"type":"register_group","jid":"...","name":"...","folder":"...","trigger":"@Andy"}` : ''}
+
+Current context:
+- Group: ${groupFolder}
+- Chat JID: ${chatJid}
+- Is Main Group: ${isMain}${tasksInfo}${groupsInfo}
+
+When you need to send a message or manage tasks, use the shell to write JSON files to the appropriate IPC directory.
+Example: echo '{"type":"message","chatJid":"${chatJid}","text":"Hello!","timestamp":"'$(date -Iseconds)'"}' > /workspace/ipc/messages/$(date +%s)-msg.json`;
 }
+
+// ============================================================================
+// Main
+// ============================================================================
 
 async function main(): Promise<void> {
   let input: ContainerInput;
@@ -216,70 +322,19 @@ async function main(): Promise<void> {
     process.exit(1);
   }
 
-  const ipcMcp = createIpcMcp({
-    chatJid: input.chatJid,
-    groupFolder: input.groupFolder,
-    isMain: input.isMain
-  });
-
-  let result: string | null = null;
-  let newSessionId: string | undefined;
-
-  // Add context for scheduled tasks
-  let prompt = input.prompt;
-  if (input.isScheduledTask) {
-    prompt = `[SCHEDULED TASK - You are running automatically, not in response to a user message. Use mcp__nanoclaw__send_message if needed to communicate with the user.]\n\n${input.prompt}`;
-  }
+  // Ensure IPC directories exist
+  fs.mkdirSync(MESSAGES_DIR, { recursive: true });
+  fs.mkdirSync(TASKS_DIR, { recursive: true });
 
   try {
-    log('Starting agent...');
-
-    for await (const message of query({
-      prompt,
-      options: {
-        cwd: '/workspace/group',
-        resume: input.sessionId,
-        allowedTools: [
-          'Bash',
-          'Read', 'Write', 'Edit', 'Glob', 'Grep',
-          'WebSearch', 'WebFetch',
-          'mcp__nanoclaw__*'
-        ],
-        permissionMode: 'bypassPermissions',
-        allowDangerouslySkipPermissions: true,
-        settingSources: ['project'],
-        mcpServers: {
-          nanoclaw: ipcMcp
-        },
-        hooks: {
-          PreCompact: [{ hooks: [createPreCompactHook()] }]
-        }
-      }
-    })) {
-      if (message.type === 'system' && message.subtype === 'init') {
-        newSessionId = message.session_id;
-        log(`Session initialized: ${newSessionId}`);
-      }
-
-      if ('result' in message && message.result) {
-        result = message.result as string;
-      }
-    }
-
-    log('Agent completed successfully');
-    writeOutput({
-      status: 'success',
-      result,
-      newSessionId
-    });
-
+    const output = await runGeminiAgent(input);
+    writeOutput(output);
   } catch (err) {
     const errorMessage = err instanceof Error ? err.message : String(err);
     log(`Agent error: ${errorMessage}`);
     writeOutput({
       status: 'error',
       result: null,
-      newSessionId,
       error: errorMessage
     });
     process.exit(1);

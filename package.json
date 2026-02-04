@@ -1,7 +1,7 @@
 {
-  "name": "nanoclaw",
+  "name": "nanogemclaw",
   "version": "1.0.0",
-  "description": "Personal Claude assistant. Lightweight, secure, customizable.",
+  "description": "Personal AI assistant powered by Gemini CLI. Lightweight, secure, customizable.",
   "type": "module",
   "main": "dist/index.js",
   "scripts": {
