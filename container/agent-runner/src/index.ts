@@ -110,7 +110,7 @@ async function runGeminiAgent(input: ContainerInput): Promise<ContainerOutput> {
 
   return new Promise((resolve) => {
     const startTime = Date.now();
-    
+
     const gemini = spawn('gemini', args, {
       cwd: '/workspace/group',
       env: {
@@ -135,13 +135,13 @@ async function runGeminiAgent(input: ContainerInput): Promise<ContainerOutput> {
       for (const line of lines) {
         try {
           const event: StreamEvent = JSON.parse(line);
-          
+
           // Capture session ID from init event
           if (event.type === 'init' && event.session_id) {
             sessionId = event.session_id;
             log(`Session: ${sessionId}`);
           }
-          
+
           // Capture assistant response
           if (event.type === 'message' && event.role === 'assistant' && event.content) {
             lastResponse = event.content;
@@ -195,7 +195,7 @@ async function runGeminiAgent(input: ContainerInput): Promise<ContainerOutput> {
 
       // Extract response from events
       let response = lastResponse;
-      
+
       // Fallback: try parsing last line as JSON
       if (!response) {
         const lines = stdout.trim().split('\n');
@@ -217,7 +217,7 @@ async function runGeminiAgent(input: ContainerInput): Promise<ContainerOutput> {
       }
 
       log(`Completed in ${durationMs}ms`);
-      
+
       resolve({
         status: 'success',
         result: response,
@@ -241,9 +241,39 @@ async function runGeminiAgent(input: ContainerInput): Promise<ContainerOutput> {
 // System Context for IPC Tools
 // ============================================================================
 
+function loadRecentConversations(limit: number = 5): string {
+  const conversationsDir = '/workspace/group/conversations';
+  if (!fs.existsSync(conversationsDir)) return '';
+
+  try {
+    const files = fs.readdirSync(conversationsDir)
+      .filter(f => f.endsWith('.md'))
+      .map(f => path.join(conversationsDir, f))
+      .map(f => ({ path: f, mtime: fs.statSync(f).mtime.getTime() }))
+      .sort((a, b) => b.mtime - a.mtime) // Newest first
+      .slice(0, limit);
+
+    if (files.length === 0) return '';
+
+    // Reverse to chronological order for the prompt
+    const archives = files.reverse().map(f => {
+      const content = fs.readFileSync(f.path, 'utf-8');
+      return `--- ARCHIVED CONVERSATION (${path.basename(f.path)}) ---\n${content}\n`;
+    }).join('\n');
+
+    return `\n\n=== LONG-TERM MEMORY (Recent Archives) ===\n${archives}\n==========================================\n`;
+  } catch (err) {
+    log(`Failed to load long-term memory: ${err instanceof Error ? err.message : String(err)}`);
+    return '';
+  }
+}
+
 function buildSystemContext(input: ContainerInput): string {
   const { groupFolder, chatJid, isMain } = input;
-  
+
+  // Load long-term memory (NanoGemClaw feature: utilizing Gemini's large context window)
+  const memoryContext = loadRecentConversations(10);
+
   // Read available tasks
   let tasksInfo = '';
   const tasksFile = path.join(IPC_DIR, 'current_tasks.json');
@@ -293,10 +323,15 @@ IMPORTANT: To interact with the messaging system, you must write JSON files to s
 ${isMain ? `4. TO REGISTER A GROUP (main only) - Write to /workspace/ipc/tasks/:
    {"type":"register_group","jid":"...","name":"...","folder":"...","trigger":"@Andy"}` : ''}
 
+WEB BROWSING:
+You have access to the \`agent-browser\` CLI tool for advanced web interaction (Javascript, screenshots, etc).
+Documentation is available at: \`/workspace/docs/agent-browser.md\`.
+Example: \`agent-browser open https://google.com && agent-browser snapshot -i\`
+
 Current context:
 - Group: ${groupFolder}
 - Chat JID: ${chatJid}
-- Is Main Group: ${isMain}${tasksInfo}${groupsInfo}
+- Is Main Group: ${isMain}${tasksInfo}${groupsInfo}${memoryContext}
 
 When you need to send a message or manage tasks, use the shell to write JSON files to the appropriate IPC directory.
 Example: echo '{"type":"message","chatJid":"${chatJid}","text":"Hello!","timestamp":"'$(date -Iseconds)'"}' > /workspace/ipc/messages/$(date +%s)-msg.json`;
