@@ -7,27 +7,29 @@
 </p>
 
 <p align="center">
-  <em>Forked from <a href="https://github.com/gavrielc/nanoclaw">NanoClaw</a> - replaced Claude Agent SDK with Gemini CLI</em>
+  <em>Forked from <a href="https://github.com/gavrielc/nanoclaw">NanoClaw</a> - replaced Claude Agent SDK with Gemini CLI, WhatsApp with Telegram</em>
 </p>
 
 ## Why NanoGemClaw?
 
-**NanoGemClaw** is a fork of [NanoClaw](https://github.com/gavrielc/nanoclaw) that replaces Claude Agent SDK with **Gemini CLI**. This gives you:
+**NanoGemClaw** is a fork of [NanoClaw](https://github.com/gavrielc/nanoclaw) that replaces Claude Agent SDK with **Gemini CLI** and WhatsApp with **Telegram**:
 
 | Feature | NanoClaw | NanoGemClaw |
 |---------|----------|-------------|
 | **Agent Runtime** | Claude Agent SDK | Gemini CLI |
+| **Messaging** | WhatsApp (Baileys) | Telegram Bot API |
 | **Cost** | Claude Max ($100/mo) | Free tier (60 req/min) |
 | **Memory File** | CLAUDE.md | GEMINI.md |
 | **Model** | Claude 3.5 Sonnet | Gemini 2.5 Pro/Flash |
+| **Media Support** | Text only | Photo, Voice, Audio, Video, Document |
 
 Same container isolation. Same architecture. Different AI backend.
 
 ## Quick Start
 
 ```bash
-git clone https://github.com/YOUR_USERNAME/nanogemclaw.git
-cd nanogemclaw
+git clone https://github.com/Rlin1027/NanoGemClaw.git
+cd NanoGemClaw
 npm install
 ```
 
@@ -41,10 +43,9 @@ npm install
    ```
 
 3. **Verify**: Run `npm run setup:telegram` to confirm the token works
-4. **Add to Group**: Add your bot to a Telegram group and make it admin
-5. **Run**: Start with `npm run dev`
-
-Then Gemini CLI handles the rest: container setup, agent configuration.
+4. **Build Container**: Run `cd container && ./build.sh`
+5. **Add to Group**: Add your bot to a Telegram group and make it admin
+6. **Run**: Start with `npm run dev`
 
 ## Philosophy
 
@@ -62,29 +63,30 @@ Then Gemini CLI handles the rest: container setup, agent configuration.
 
 ## What It Supports
 
-- **WhatsApp I/O** - Message Gemini from your phone
+- **Telegram I/O** - Message Gemini from your phone (photo, voice, video, document supported)
 - **Isolated group context** - Each group has its own `GEMINI.md` memory, isolated filesystem, and runs in its own container sandbox
-- **Main channel** - Your private channel (self-chat) for admin control; every other group is completely isolated
+- **Main channel** - Your private channel for admin control; every other group is completely isolated
 - **Scheduled tasks** - Recurring jobs that run Gemini and can message you back
-- **Web access** - Search and fetch content with Google Search grounding
+- **Web access** - Search and fetch content with browser automation (`agent-browser`)
+- **Long-term memory** - Automatically loads recent archived conversations into context (utilizing Gemini's 2M token window)
 - **Container isolation** - Agents sandboxed in Apple Container (macOS) or Docker (macOS/Linux)
 
 ## Usage
 
 Talk to your assistant with the trigger word (default: `@Andy`):
 
-```
+```text
 @Andy send an overview of the sales pipeline every weekday morning at 9am
 @Andy review the git history for the past week each Friday and update the README
 @Andy every Monday at 8am, compile news on AI developments from Hacker News
 ```
 
-From the main channel (your self-chat), you can manage groups and tasks:
+From the main channel, you can manage groups and tasks:
 
-```
+```text
 @Andy list all scheduled tasks across groups
 @Andy pause the Monday briefing task
-@Andy join the Family Chat group
+@Andy join the "Family Chat" group
 ```
 
 ## Customizing
@@ -117,15 +119,15 @@ npm install -g @google/gemini-cli
 
 ## Architecture
 
-```
-WhatsApp (baileys) --> SQLite --> Polling loop --> Container (Gemini CLI) --> Response
+```text
+Telegram Bot API --> SQLite --> Polling loop --> Container (Gemini CLI) --> Response
 ```
 
 Single Node.js process. Agents execute in isolated Linux containers with mounted directories. IPC via filesystem. No daemons, no queues, no complexity.
 
 Key files:
 
-- `src/index.ts` - Main app: WhatsApp connection, routing, IPC
+- `src/index.ts` - Main app: Telegram connection, routing, IPC
 - `src/container-runner.ts` - Spawns agent containers
 - `src/task-scheduler.ts` - Runs scheduled tasks
 - `src/db.ts` - SQLite operations
@@ -135,8 +137,8 @@ Key files:
 
 Gemini CLI supports three authentication methods:
 
-1. **Google OAuth** (recommended): Run `gemini` interactively to authenticate
-2. **API Key**: Set `GEMINI_API_KEY` environment variable
+1. **Google OAuth** (recommended): Run `gemini` interactively to authenticate. NanoGemClaw mounts your `~/.gemini` directory into containers.
+2. **API Key**: Set `GEMINI_API_KEY` in your `.env` file
 3. **Vertex AI**: For enterprise deployments with ADC
 
 ## FAQ
@@ -145,13 +147,13 @@ Gemini CLI supports three authentication methods:
 
 To use Gemini CLI instead of Claude Agent SDK, which offers a generous free tier and doesn't require a Claude Max subscription.
 
-**Why WhatsApp and not Telegram/Signal/etc?**
+**Why Telegram instead of WhatsApp?**
 
-The original NanoClaw uses WhatsApp. You can fork this and switch to Telegram - that's the whole point.
+Telegram Bot API is more stable, doesn't require QR code scanning, and has better multimedia support. WhatsApp (via Baileys) can have session expiration issues.
 
 **Can I run this on Linux?**
 
-Yes. Run `/setup` and it will automatically configure Docker as the container runtime.
+Yes. The container build script automatically uses Docker if Apple Container is not available.
 
 **Is this secure?**
 
@@ -161,7 +163,7 @@ Agents run in containers, not behind application-level permission checks. They c
 
 **Don't add features. Add skills.**
 
-If you want to add Telegram support, contribute a skill file (`.gemini/skills/add-telegram/SKILL.md`) that teaches Gemini CLI how to transform the installation.
+If you want to add a new capability, contribute a skill file (`container/skills/your-skill/SKILL.md`) that teaches Gemini CLI how to implement it.
 
 ## License
 
