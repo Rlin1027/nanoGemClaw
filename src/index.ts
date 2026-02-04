@@ -350,8 +350,12 @@ async function sendMessage(chatId: string, text: string): Promise<void> {
       chunks.push(text.slice(i, i + maxLen));
     }
 
-    for (const chunk of chunks) {
-      await bot.sendMessage(parseInt(chatId), chunk);
+    for (let i = 0; i < chunks.length; i++) {
+      await bot.sendMessage(parseInt(chatId), chunks[i]);
+      // Rate limiting: add 100ms delay between chunks to avoid Telegram limits
+      if (i < chunks.length - 1) {
+        await new Promise(r => setTimeout(r, 100));
+      }
     }
     logger.info({ chatId, length: text.length }, 'Message sent');
   } catch (err) {
@@ -786,4 +790,28 @@ async function main(): Promise<void> {
 main().catch((err) => {
   console.error('Fatal error:', err);
   process.exit(1);
+});
+
+// Graceful shutdown handlers
+process.on('SIGINT', async () => {
+  console.log('\nShutting down gracefully...');
+  try {
+    await bot?.stopPolling();
+    saveState();
+    console.log('State saved. Goodbye!');
+  } catch (err) {
+    console.error('Error during shutdown:', err);
+  }
+  process.exit(0);
+});
+
+process.on('SIGTERM', async () => {
+  console.log('Received SIGTERM, shutting down...');
+  try {
+    await bot?.stopPolling();
+    saveState();
+  } catch (err) {
+    console.error('Error during shutdown:', err);
+  }
+  process.exit(0);
 });

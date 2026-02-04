@@ -133,7 +133,7 @@ function buildVolumeMounts(
   });
 
   // Environment file directory (workaround for Apple Container -i env var bug)
-  // Only expose specific auth variables needed by Claude Code, not the entire .env
+  // Only expose specific auth variables needed by Gemini CLI, not the entire .env
   const envDir = path.join(DATA_DIR, 'env');
   fs.mkdirSync(envDir, { recursive: true });
   const envFile = path.join(projectRoot, '.env');
