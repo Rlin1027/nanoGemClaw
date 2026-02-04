@@ -96,13 +96,15 @@ function buildVolumeMounts(
     }
   }
 
-  // Global Gemini directory for OAuth credentials
+  // Global Gemini directory for OAuth credentials and session data
+  // Note: Must be writable because Apple Container doesn't support sub-directory
+  // overlay mounts, and Gemini CLI needs to write to ~/.gemini/tmp for sessions
   const hostGeminiDir = path.join(homeDir, '.gemini');
   if (fs.existsSync(hostGeminiDir)) {
     mounts.push({
       hostPath: hostGeminiDir,
       containerPath: '/home/node/.gemini',
-      readonly: true,
+      readonly: false,  // Gemini CLI needs write access for tmp/sessions
     });
   }
 
