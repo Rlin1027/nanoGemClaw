@@ -142,9 +142,15 @@ async function runGeminiAgent(input: ContainerInput): Promise<ContainerOutput> {
             log(`Session: ${sessionId}`);
           }
 
-          // Capture assistant response
+          // Capture assistant response - accumulate all message chunks
           if (event.type === 'message' && event.role === 'assistant' && event.content) {
-            lastResponse = event.content;
+            // Gemini CLI may send multiple message events for a single response
+            // Append instead of overwrite to capture the full response
+            if (lastResponse === null) {
+              lastResponse = event.content;
+            } else {
+              lastResponse += event.content;
+            }
           }
 
           // Log tool usage
