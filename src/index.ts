@@ -42,15 +42,7 @@ import { startSchedulerLoop } from './task-scheduler.js';
 import { NewMessage, RegisteredGroup, Session } from './types.js';
 import { loadJson, saveJson } from './utils.js';
 
-// Simple console logger (replacing pino)
-const logger = {
-  info: (data: object | string, msg?: string) => console.log(`[INFO] ${msg || ''} ${typeof data === 'object' ? JSON.stringify(data) : data}`),
-  error: (data: object | string, msg?: string) => console.error(`[ERROR] ${msg || ''} ${typeof data === 'object' ? JSON.stringify(data) : data}`),
-  warn: (data: object | string, msg?: string) => console.warn(`[WARN] ${msg || ''} ${typeof data === 'object' ? JSON.stringify(data) : data}`),
-  debug: (data: object | string, msg?: string) => {
-    if (process.env.LOG_LEVEL === 'debug') console.log(`[DEBUG] ${msg || ''} ${typeof data === 'object' ? JSON.stringify(data) : data}`);
-  },
-};
+import { logger } from './logger.js';
 
 let bot: TelegramBot;
 let lastTimestamp = '';
@@ -182,6 +174,12 @@ async function downloadMedia(
     await new Promise<void>((resolve, reject) => {
       const file = fs.createWriteStream(localPath);
       https.get(fileUrl, (response) => {
+        // Check for successful HTTP response
+        if (response.statusCode !== 200) {
+          fs.unlink(localPath, () => { });
+          reject(new Error(`HTTP ${response.statusCode}: Failed to download media`));
+          return;
+        }
         response.pipe(file);
         file.on('finish', () => {
           file.close();

@@ -103,8 +103,8 @@ async function runGeminiAgent(input: ContainerInput): Promise<ContainerOutput> {
     args.push('--resume', input.sessionId);
   }
 
-  // Use fast model for efficiency
-  args.push('-m', 'gemini-2.5-flash');
+  // Note: Model selection is handled by Gemini CLI settings (Auto mode)
+  // Users can configure preferred model via `gemini /settings`
 
   log(`Running: gemini ${args.slice(0, 4).join(' ')}...`);
 
