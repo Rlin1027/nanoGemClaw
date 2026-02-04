@@ -8,15 +8,10 @@
  */
 import fs from 'fs';
 import path from 'path';
-import pino from 'pino';
 
 import { MOUNT_ALLOWLIST_PATH } from './config.js';
+import { logger } from './logger.js';
 import { AdditionalMount, AllowedRoot, MountAllowlist } from './types.js';
-
-const logger = pino({
-  level: process.env.LOG_LEVEL || 'info',
-  transport: { target: 'pino-pretty', options: { colorize: true } },
-});
 
 // Cache the allowlist in memory - only reloads on process restart
 let cachedAllowlist: MountAllowlist | null = null;
@@ -66,7 +61,7 @@ export function loadMountAllowlist(): MountAllowlist | null {
       logger.warn(
         { path: MOUNT_ALLOWLIST_PATH },
         'Mount allowlist not found - additional mounts will be BLOCKED. ' +
-          'Create the file to enable additional mounts.',
+        'Create the file to enable additional mounts.',
       );
       return null;
     }

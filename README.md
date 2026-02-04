@@ -28,10 +28,23 @@ Same container isolation. Same architecture. Different AI backend.
 ```bash
 git clone https://github.com/YOUR_USERNAME/nanogemclaw.git
 cd nanogemclaw
-gemini
+npm install
 ```
 
-Then run `/setup`. Gemini CLI handles everything: dependencies, authentication, container setup, service configuration.
+### Setup Telegram Bot
+
+1. **Get a Bot Token**: Message [@BotFather](https://t.me/botfather) on Telegram and send `/newbot`
+2. **Configure**: Create `.env` file with your token:
+
+   ```bash
+   echo "TELEGRAM_BOT_TOKEN=your_bot_token_here" > .env
+   ```
+
+3. **Verify**: Run `npm run setup:telegram` to confirm the token works
+4. **Add to Group**: Add your bot to a Telegram group and make it admin
+5. **Run**: Start with `npm run dev`
+
+Then Gemini CLI handles the rest: container setup, agent configuration.
 
 ## Philosophy
 
