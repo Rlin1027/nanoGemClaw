@@ -39,6 +39,10 @@ export interface RegisteredGroup {
   trigger: string;
   added_at: string;
   containerConfig?: ContainerConfig;
+  /** Custom system prompt for this group's persona */
+  systemPrompt?: string;
+  /** Enable Google Search grounding for up-to-date information (default: true) */
+  enableWebSearch?: boolean;
 }
 
 export interface Session {

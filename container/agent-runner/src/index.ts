@@ -21,6 +21,10 @@ interface ContainerInput {
   chatJid: string;
   isMain: boolean;
   isScheduledTask?: boolean;
+  /** Custom system prompt for group persona */
+  systemPrompt?: string;
+  /** Enable Google Search grounding (default: true) */
+  enableWebSearch?: boolean;
 }
 
 interface ContainerOutput {
@@ -87,6 +91,11 @@ async function runGeminiAgent(input: ContainerInput): Promise<ContainerOutput> {
   let prompt = input.prompt;
   if (input.isScheduledTask) {
     prompt = `[SCHEDULED TASK - You are running automatically, not in response to a user message. Use the send_message tool if needed to communicate with the user.]\n\n${input.prompt}`;
+  }
+
+  // Inject custom system prompt if provided
+  if (input.systemPrompt) {
+    prompt = `[SYSTEM INSTRUCTIONS]\n${input.systemPrompt}\n[END SYSTEM INSTRUCTIONS]\n\n${prompt}`;
   }
 
   // Add system context about available IPC tools

@@ -103,6 +103,10 @@ export interface ContainerInput {
   chatJid: string;
   isMain: boolean;
   isScheduledTask?: boolean;
+  /** Custom system prompt for group persona */
+  systemPrompt?: string;
+  /** Enable Google Search grounding (default: true) */
+  enableWebSearch?: boolean;
 }
 
 export interface ContainerOutput {

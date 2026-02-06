@@ -93,6 +93,8 @@ async function runTask(
       chatJid: task.chat_jid,
       isMain,
       isScheduledTask: true,
+      systemPrompt: group.systemPrompt,
+      enableWebSearch: group.enableWebSearch ?? true,
     });
 
     if (output.status === 'error') {

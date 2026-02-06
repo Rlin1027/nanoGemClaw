@@ -359,6 +359,8 @@ async function runAgent(
       groupFolder: group.folder,
       chatJid: chatId, // Using chatId as chatJid for compatibility
       isMain,
+      systemPrompt: group.systemPrompt,
+      enableWebSearch: group.enableWebSearch ?? true, // Default: enabled
     });
 
     if (output.newSessionId) {
