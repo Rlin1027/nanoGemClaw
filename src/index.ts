@@ -57,19 +57,22 @@ let lastAgentTimestamp: Record<string, string> = {};
 // State Management
 // ============================================================================
 
-function loadState(): void {
+async function loadState(): Promise<void> {
   const statePath = path.join(DATA_DIR, 'router_state.json');
   const state = loadJson<{
     last_timestamp?: string;
     last_agent_timestamp?: Record<string, string>;
-    language?: import('./i18n.js').Language;
+    language?: string;
   }>(statePath, {});
   lastTimestamp = state.last_timestamp || '';
   lastAgentTimestamp = state.last_agent_timestamp || {};
 
   if (state.language) {
-    const { setLanguage } = require('./i18n.js');
-    setLanguage(state.language);
+    const { setLanguage, availableLanguages } = await import('./i18n.js');
+    type Language = import('./i18n.js').Language;
+    if (availableLanguages.includes(state.language as Language)) {
+      setLanguage(state.language as Language);
+    }
   }
 
   sessions = loadJson(path.join(DATA_DIR, 'sessions.json'), {});
@@ -78,13 +81,13 @@ function loadState(): void {
     {},
   );
   logger.info(
-    { groupCount: Object.keys(registeredGroups).length, language: state.language || 'default' },
+    { groupCount: Object.keys(registeredGroups).length },
     'State loaded',
   );
 }
 
-function saveState(): void {
-  const { getLanguage } = require('./i18n.js');
+async function saveState(): Promise<void> {
+  const { getLanguage } = await import('./i18n.js');
   saveJson(path.join(DATA_DIR, 'router_state.json'), {
     last_timestamp: lastTimestamp,
     last_agent_timestamp: lastAgentTimestamp,
@@ -420,6 +423,7 @@ ${taskList}${moreText}`;
       const lang = args[0] as Language;
       if (availableLanguages.includes(lang)) {
         setLanguage(lang);
+        saveState(); // Persist change
         return `✅ Language switched to: **${lang}**`;
       }
       return `❌ Invalid language. Available: ${availableLanguages.join(', ')}\nCurrent: ${getLanguage()}`;
@@ -1344,7 +1348,7 @@ async function main(): Promise<void> {
   fs.mkdirSync(GROUPS_DIR, { recursive: true });
 
   initDatabase();
-  loadState();
+  await loadState();
 
   // Start health check server
   const { setHealthCheckDependencies, startHealthCheckServer } = await import('./health-check.js');
