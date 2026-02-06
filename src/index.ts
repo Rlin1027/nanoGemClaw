@@ -521,12 +521,7 @@ async function setTyping(chatId: string, isTyping: boolean): Promise<void> {
 
 async function sendMessage(chatId: string, text: string): Promise<void> {
   try {
-    // Split long messages (Telegram limit)
-    const maxLen = TELEGRAM.MAX_MESSAGE_LENGTH - 96; // Leave room for safety margin
-    const chunks = [];
-    for (let i = 0; i < text.length; i += maxLen) {
-      chunks.push(text.slice(i, i + maxLen));
-    }
+    const chunks = splitMessageIntelligently(text, TELEGRAM.MAX_MESSAGE_LENGTH - 96);
 
     for (let i = 0; i < chunks.length; i++) {
       await bot.sendMessage(parseInt(chatId), chunks[i]);
@@ -535,10 +530,91 @@ async function sendMessage(chatId: string, text: string): Promise<void> {
         await new Promise(r => setTimeout(r, TELEGRAM.RATE_LIMIT_DELAY_MS));
       }
     }
-    logger.info({ chatId, length: text.length }, 'Message sent');
+    logger.info({ chatId, length: text.length, chunks: chunks.length }, 'Message sent');
   } catch (err) {
     logger.error({ chatId, err: formatError(err) }, 'Failed to send message');
   }
+}
+
+/**
+ * Split a long message at natural breakpoints (paragraphs, then sentences)
+ * while trying to preserve markdown code blocks.
+ */
+function splitMessageIntelligently(text: string, maxLen: number): string[] {
+  if (text.length <= maxLen) {
+    return [text];
+  }
+
+  const chunks: string[] = [];
+  let remaining = text;
+
+  while (remaining.length > 0) {
+    if (remaining.length <= maxLen) {
+      chunks.push(remaining);
+      break;
+    }
+
+    // Find the best split point within maxLen
+    let splitPoint = findSplitPoint(remaining, maxLen);
+
+    chunks.push(remaining.slice(0, splitPoint).trim());
+    remaining = remaining.slice(splitPoint).trim();
+  }
+
+  return chunks;
+}
+
+/**
+ * Find the best point to split a message, preferring:
+ * 1. After a code block (```)
+ * 2. After a paragraph break (double newline)
+ * 3. After a single newline
+ * 4. After a sentence (. ! ?)
+ * 5. After a word boundary (space)
+ * 6. Hard cut at maxLen (last resort)
+ */
+function findSplitPoint(text: string, maxLen: number): number {
+  const searchText = text.slice(0, maxLen);
+
+  // Priority 1: After code block closing
+  const codeBlockEnd = searchText.lastIndexOf('\n```\n');
+  if (codeBlockEnd > maxLen * 0.3) {
+    return codeBlockEnd + 5;
+  }
+
+  // Priority 2: After paragraph break (double newline)
+  const paragraphBreak = searchText.lastIndexOf('\n\n');
+  if (paragraphBreak > maxLen * 0.5) {
+    return paragraphBreak + 2;
+  }
+
+  // Priority 3: After single newline
+  const lineBreak = searchText.lastIndexOf('\n');
+  if (lineBreak > maxLen * 0.7) {
+    return lineBreak + 1;
+  }
+
+  // Priority 4: After sentence ending
+  const sentenceEnders = ['. ', '! ', '? ', '。', '！', '？'];
+  let lastSentence = -1;
+  for (const ender of sentenceEnders) {
+    const pos = searchText.lastIndexOf(ender);
+    if (pos > lastSentence) {
+      lastSentence = pos;
+    }
+  }
+  if (lastSentence > maxLen * 0.5) {
+    return lastSentence + 2;
+  }
+
+  // Priority 5: After space (word boundary)
+  const lastSpace = searchText.lastIndexOf(' ');
+  if (lastSpace > maxLen * 0.7) {
+    return lastSpace + 1;
+  }
+
+  // Priority 6: Hard cut (avoid breaking markdown)
+  return maxLen;
 }
 
 function getAvailableGroups(): AvailableGroup[] {
