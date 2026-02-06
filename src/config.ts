@@ -47,6 +47,16 @@ export const CONTAINER_MAX_OUTPUT_SIZE = parseInt(
 ); // 10MB default
 export const IPC_POLL_INTERVAL = 1000;
 
+/**
+ * Health check HTTP server configuration
+ */
+export const HEALTH_CHECK = {
+  /** Enable health check HTTP server */
+  ENABLED: process.env.HEALTH_CHECK_ENABLED !== 'false',
+  /** Port for health check server */
+  PORT: parseInt(process.env.HEALTH_CHECK_PORT || '8080', 10),
+} as const;
+
 function escapeRegex(str: string): string {
   return str.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
 }

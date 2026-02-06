@@ -1028,6 +1028,13 @@ async function main(): Promise<void> {
   initDatabase();
   loadState();
 
+  // Start health check server
+  const { setHealthCheckDependencies, startHealthCheckServer } = await import('./health-check.js');
+  setHealthCheckDependencies({
+    getGroupCount: () => Object.keys(registeredGroups).length,
+  });
+  startHealthCheckServer();
+
   // Connect to Telegram
   await connectTelegram();
 }
@@ -1041,6 +1048,8 @@ main().catch((err) => {
 process.on('SIGINT', async () => {
   console.log('\nShutting down gracefully...');
   try {
+    const { stopHealthCheckServer } = await import('./health-check.js');
+    await stopHealthCheckServer();
     await bot?.stopPolling();
     saveState();
     closeDatabase();
@@ -1054,6 +1063,8 @@ process.on('SIGINT', async () => {
 process.on('SIGTERM', async () => {
   console.log('Received SIGTERM, shutting down...');
   try {
+    const { stopHealthCheckServer } = await import('./health-check.js');
+    await stopHealthCheckServer();
     await bot?.stopPolling();
     saveState();
     closeDatabase();
