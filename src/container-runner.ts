@@ -109,6 +109,8 @@ export interface ContainerInput {
   enableWebSearch?: boolean;
   /** Path to media file (image/voice/document) for multi-modal input */
   mediaPath?: string;
+  /** Memory context from conversation summaries */
+  memoryContext?: string;
 }
 
 export interface ContainerOutput {

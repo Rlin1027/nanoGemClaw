@@ -469,6 +469,10 @@ async function runAgent(
   );
 
   try {
+    // Get memory context from conversation summaries
+    const { getMemoryContext } = await import('./memory-summarizer.js');
+    const memoryContext = getMemoryContext(group.folder);
+
     const output = await runContainerAgent(group, {
       prompt,
       sessionId,
@@ -478,6 +482,7 @@ async function runAgent(
       systemPrompt: group.systemPrompt,
       enableWebSearch: group.enableWebSearch ?? true, // Default: enabled
       mediaPath: mediaPath ? `/workspace/group/media/${path.basename(mediaPath)}` : undefined,
+      memoryContext: memoryContext ?? undefined,
     });
 
     if (output.newSessionId) {

@@ -102,6 +102,26 @@ export const CONTAINER = {
 } as const;
 
 /**
+ * Memory/conversation summary configuration
+ */
+export const MEMORY = {
+  /** Approximate character count threshold to trigger summarization */
+  SUMMARIZE_THRESHOLD_CHARS: 50000,
+  /** Maximum messages to include in context before triggering summary */
+  MAX_CONTEXT_MESSAGES: 100,
+  /** How often to check for conversations needing summarization (hours) */
+  CHECK_INTERVAL_HOURS: 4,
+  /** Summary prompt template */
+  SUMMARY_PROMPT: `Summarize the following conversation history concisely. Focus on:
+1. Key topics discussed
+2. Important decisions made
+3. Open questions or tasks
+4. User preferences learned
+
+Keep the summary under 500 words. Output in the same language as the conversation.`,
+} as const;
+
+/**
  * Allowed environment variables to pass to containers
  */
 export const ALLOWED_CONTAINER_ENV_KEYS = [

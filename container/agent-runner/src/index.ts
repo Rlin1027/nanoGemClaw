@@ -27,6 +27,8 @@ interface ContainerInput {
   enableWebSearch?: boolean;
   /** Path to media file (image/voice/document) for multi-modal input */
   mediaPath?: string;
+  /** Memory context from conversation summaries */
+  memoryContext?: string;
 }
 
 interface ContainerOutput {
@@ -98,6 +100,11 @@ async function runGeminiAgent(input: ContainerInput): Promise<ContainerOutput> {
   // Inject custom system prompt if provided
   if (input.systemPrompt) {
     prompt = `[SYSTEM INSTRUCTIONS]\n${input.systemPrompt}\n[END SYSTEM INSTRUCTIONS]\n\n${prompt}`;
+  }
+
+  // Inject memory context from conversation summaries
+  if (input.memoryContext) {
+    prompt = `${input.memoryContext}\n\n${prompt}`;
   }
 
   // Add system context about available IPC tools

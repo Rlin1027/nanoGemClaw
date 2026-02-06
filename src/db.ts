@@ -71,6 +71,17 @@ export function initDatabase(): void {
     );
     CREATE INDEX IF NOT EXISTS idx_usage_stats_group ON usage_stats(group_folder);
     CREATE INDEX IF NOT EXISTS idx_usage_stats_timestamp ON usage_stats(timestamp);
+
+    CREATE TABLE IF NOT EXISTS memory_summaries (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      group_folder TEXT NOT NULL UNIQUE,
+      summary TEXT NOT NULL,
+      messages_archived INTEGER NOT NULL,
+      chars_archived INTEGER NOT NULL,
+      created_at TEXT NOT NULL,
+      updated_at TEXT NOT NULL
+    );
+    CREATE UNIQUE INDEX IF NOT EXISTS idx_memory_summaries_group ON memory_summaries(group_folder);
   `);
 
   // Add sender_name column if it doesn't exist (migration for existing DBs)
@@ -480,4 +491,87 @@ export function getRecentUsage(limit = 20): UsageEntry[] {
        FROM usage_stats ORDER BY timestamp DESC LIMIT ?`,
     )
     .all(limit) as UsageEntry[];
+}
+
+// ============================================================================
+// Memory Summaries
+// ============================================================================
+
+export interface MemorySummary {
+  group_folder: string;
+  summary: string;
+  messages_archived: number;
+  chars_archived: number;
+  created_at: string;
+  updated_at: string;
+}
+
+export function getMemorySummary(groupFolder: string): MemorySummary | null {
+  return db
+    .prepare('SELECT * FROM memory_summaries WHERE group_folder = ?')
+    .get(groupFolder) as MemorySummary | null;
+}
+
+export function upsertMemorySummary(
+  groupFolder: string,
+  summary: string,
+  messagesArchived: number,
+  charsArchived: number,
+): void {
+  const now = new Date().toISOString();
+  db.prepare(`
+    INSERT INTO memory_summaries (group_folder, summary, messages_archived, chars_archived, created_at, updated_at)
+    VALUES (?, ?, ?, ?, ?, ?)
+    ON CONFLICT(group_folder) DO UPDATE SET
+      summary = excluded.summary,
+      messages_archived = memory_summaries.messages_archived + excluded.messages_archived,
+      chars_archived = memory_summaries.chars_archived + excluded.chars_archived,
+      updated_at = excluded.updated_at
+  `).run(groupFolder, summary, messagesArchived, charsArchived, now, now);
+}
+
+export interface GroupMessageStats {
+  chat_jid: string;
+  message_count: number;
+  total_chars: number;
+  oldest_timestamp: string;
+  newest_timestamp: string;
+}
+
+export function getGroupMessageStats(chatJid: string): GroupMessageStats | null {
+  return db
+    .prepare(`
+      SELECT 
+        chat_jid,
+        COUNT(*) as message_count,
+        SUM(LENGTH(content)) as total_chars,
+        MIN(timestamp) as oldest_timestamp,
+        MAX(timestamp) as newest_timestamp
+      FROM messages
+      WHERE chat_jid = ?
+      GROUP BY chat_jid
+    `)
+    .get(chatJid) as GroupMessageStats | null;
+}
+
+export function getMessagesForSummary(
+  chatJid: string,
+  limit: number = 100,
+): { sender_name: string; content: string; timestamp: string }[] {
+  return db
+    .prepare(`
+      SELECT sender_name, content, timestamp
+      FROM messages
+      WHERE chat_jid = ?
+      ORDER BY timestamp ASC
+      LIMIT ?
+    `)
+    .all(chatJid, limit) as { sender_name: string; content: string; timestamp: string }[];
+}
+
+export function deleteOldMessages(chatJid: string, beforeTimestamp: string): number {
+  const result = db
+    .prepare('DELETE FROM messages WHERE chat_jid = ? AND timestamp < ?')
+    .run(chatJid, beforeTimestamp);
+  return result.changes;
 }
