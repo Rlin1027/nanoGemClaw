@@ -97,37 +97,45 @@ export function generateDailyReport(): DailyReport {
 /**
  * Format a daily report as a markdown message
  */
+// ... imports
+import { t } from './i18n.js';
+
+// ... (other code)
+
+/**
+ * Format a daily report as a markdown message
+ */
 export function formatDailyReport(report: DailyReport): string {
     const avgSeconds = Math.round(report.usage.avg_duration_ms / 1000);
 
     const topGroupsList = report.top_groups.length > 0
         ? report.top_groups
-            .map((g, i) => `${i + 1}. ${g.name}: ${g.requests} 次`)
+            .map((g, i) => `${i + 1}. ${g.name}: ${g.requests}`)
             .join('\n')
-        : '(無數據)';
+        : '(No data)';
 
     const errorStatus = report.errors.groups_with_errors > 0
-        ? `⚠️ ${report.errors.groups_with_errors} 群組有錯誤 (${report.errors.total_failures} 次失敗)`
-        : '✅ 無錯誤';
+        ? `${t().groupsWithErrors}: ${report.errors.groups_with_errors} (${report.errors.total_failures} failures)`
+        : t().noErrors;
 
-    return `📊 **每日報告**
-_${new Date(report.period.start).toLocaleDateString('zh-TW')} ~ ${new Date(report.period.end).toLocaleDateString('zh-TW')}_
+    return `${t().statsTitle} (Daily Report)
+_${new Date(report.period.start).toLocaleDateString()} ~ ${new Date(report.period.end).toLocaleDateString()}_
 
 ---
 
-**📈 使用統計**
-• 總請求數: ${report.usage.total_requests}
-• 平均回應時間: ${avgSeconds} 秒
-• Token 使用量: ${report.usage.total_tokens.toLocaleString()}
+${t().usageAnalytics}
+• ${t().totalRequests}: ${report.usage.total_requests}
+• ${t().avgResponseTime}: ${avgSeconds}s
+• ${t().totalTokens}: ${report.usage.total_tokens.toLocaleString()}
 
-**🏆 最活躍群組**
+**🏆 Top Groups**
 ${topGroupsList}
 
-**❤️ 系統健康**
+**❤️ Health**
 ${errorStatus}
 
 ---
-_報告生成於 ${new Date(report.generated_at).toLocaleTimeString('zh-TW')}_`;
+_Generated at ${new Date(report.generated_at).toLocaleTimeString()}_`;
 }
 
 /**
@@ -139,6 +147,6 @@ export function getDailyReportMessage(): string {
         return formatDailyReport(report);
     } catch (err) {
         logger.error({ err }, 'Failed to generate daily report');
-        return '❌ 無法生成每日報告';
+        return '❌ Failed to generate report';
     }
 }

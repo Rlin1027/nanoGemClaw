@@ -138,6 +138,18 @@ export const CONTAINER = {
 } as const;
 
 /**
+ * Webhook configuration
+ */
+export const WEBHOOK = {
+  /** External webhook URL for notifications (Slack/Discord/IFTTT) */
+  URL: process.env.WEBHOOK_URL || '',
+  /** Events to trigger webhook: 'error', 'alert', 'system' */
+  EVENTS: (process.env.WEBHOOK_EVENTS || 'error,alert').split(','),
+  /** Enable webhook notifications */
+  ENABLED: !!process.env.WEBHOOK_URL,
+} as const;
+
+/**
  * Memory/conversation summary configuration
  */
 export const MEMORY = {

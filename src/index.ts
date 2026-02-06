@@ -260,6 +260,7 @@ const ADMIN_COMMANDS = {
   help: 'Show available admin commands',
   errors: 'Show groups with recent errors',
   report: 'Generate daily usage report',
+  language: 'Switch language (zh-TW/en)',
 } as const;
 
 async function handleAdminCommand(
@@ -267,6 +268,8 @@ async function handleAdminCommand(
   args: string[],
 ): Promise<string> {
   const { getAllTasks, getUsageStats, getAllErrorStates } = await import('./db.js');
+  const { t, setLanguage, availableLanguages, getLanguage } = await import('./i18n.js');
+  type Language = import('./i18n.js').Language;
 
   switch (command) {
     case 'stats': {
@@ -281,16 +284,16 @@ async function handleAdminCommand(
         ? Math.round(usage.avg_duration_ms / 1000)
         : 0;
 
-      return `📊 **NanoGemClaw Stats**
+      return `${t().statsTitle}
 
-• Registered Groups: ${groupCount}
-• Uptime: ${uptimeHours}h ${uptimeMinutes}m
-• Memory: ${Math.round(process.memoryUsage().heapUsed / 1024 / 1024)}MB
+• ${t().registeredGroups}: ${groupCount}
+• ${t().uptime}: ${uptimeHours}h ${uptimeMinutes}m
+• ${t().memory}: ${Math.round(process.memoryUsage().heapUsed / 1024 / 1024)}MB
 
-📈 **Usage Analytics**
-• Total Requests: ${usage.total_requests}
-• Avg Response Time: ${avgDuration}s
-• Total Tokens: ${usage.total_prompt_tokens + usage.total_response_tokens}`;
+${t().usageAnalytics}
+• ${t().totalRequests}: ${usage.total_requests}
+• ${t().avgResponseTime}: ${avgDuration}s
+• ${t().totalTokens}: ${usage.total_prompt_tokens + usage.total_response_tokens}`;
     }
 
     case 'groups': {
@@ -307,7 +310,7 @@ async function handleAdminCommand(
    📁 ${g.folder} | 🎯 ${g.trigger}`;
       }).join('\n');
 
-      return `📁 **Registered Groups** (${groups.length})
+      return `📁 **${t().registeredGroups}** (${groups.length})
 
 ${groupList}
 
@@ -339,7 +342,7 @@ ${taskList}${moreText}`;
       const errorStates = getAllErrorStates();
 
       if (errorStates.length === 0) {
-        return '✅ **No Errors**\n\nAll groups are running without recent errors.';
+        return t().noErrors;
       }
 
       const errorList = errorStates
@@ -353,13 +356,22 @@ ${taskList}${moreText}`;
         .join('\n');
 
       return errorList
-        ? `⚠️ **Groups with Errors**\n\n${errorList}`
-        : '✅ **No Active Errors**';
+        ? `${t().groupsWithErrors}\n\n${errorList}`
+        : t().noActiveErrors;
     }
 
     case 'report': {
       const { getDailyReportMessage } = await import('./daily-report.js');
       return getDailyReportMessage();
+    }
+
+    case 'language': {
+      const lang = args[0] as Language;
+      if (availableLanguages.includes(lang)) {
+        setLanguage(lang);
+        return `✅ Language switched to: **${lang}**`;
+      }
+      return `❌ Invalid language. Available: ${availableLanguages.join(', ')}\nCurrent: ${getLanguage()}`;
     }
 
     case 'help':
@@ -368,11 +380,11 @@ ${taskList}${moreText}`;
         .map(([cmd, desc]) => `• \`/admin ${cmd}\` - ${desc}`)
         .join('\n');
 
-      return `🛠️ **Admin Commands**
+      return `${t().adminCommandsTitle}
 
 ${commandList}
 
-_Admin commands are only available in the main group._`;
+${t().adminOnlyNote}`;
     }
   }
 }
@@ -416,6 +428,7 @@ async function processMessage(msg: TelegramBot.Message): Promise<void> {
   // Rate limiting check
   const { checkRateLimit } = await import('./db.js');
   const { RATE_LIMIT } = await import('./config.js');
+  const { t } = await import('./i18n.js');
 
   if (RATE_LIMIT.ENABLED) {
     const rateLimitKey = `group:${chatId}`;
@@ -425,9 +438,20 @@ async function processMessage(msg: TelegramBot.Message): Promise<void> {
     if (!result.allowed) {
       const waitMinutes = Math.ceil(result.resetInMs / 60000);
       logger.warn({ chatId, remaining: result.remaining, waitMinutes }, 'Rate limited');
-      await sendMessage(chatId, `${RATE_LIMIT.MESSAGE} (${waitMinutes} 分鐘後重試)`);
+      await sendMessage(chatId, `${t().rateLimited} ${t().retryIn(waitMinutes)}`);
       return;
     }
+  }
+
+  // Extract reply context if this message is a reply to another
+  let replyContext = '';
+  if (msg.reply_to_message) {
+    const replyMsg = msg.reply_to_message;
+    const replySender = replyMsg.from?.first_name || 'Unknown';
+    const replyContent = replyMsg.text || replyMsg.caption || '[非文字內容]';
+    replyContext = `[回覆 ${replySender} 的訊息: "${replyContent.slice(0, 200)}${replyContent.length > 200 ? '...' : ''}"]\n`;
+    content = replyContext + content;
+    logger.info({ chatId, replyToId: replyMsg.message_id }, 'Processing reply context');
   }
 
   // Handle media if present
@@ -555,12 +579,42 @@ async function runAgent(
 // Telegram Helpers
 // ============================================================================
 
+// Typing indicator state (per chat)
+const typingIntervals = new Map<string, NodeJS.Timeout>();
+
 async function setTyping(chatId: string, isTyping: boolean): Promise<void> {
   if (isTyping) {
+    // Clear any existing interval
+    const existing = typingIntervals.get(chatId);
+    if (existing) {
+      clearInterval(existing);
+    }
+
+    // Send initial typing indicator
     try {
       await bot.sendChatAction(parseInt(chatId), 'typing');
     } catch {
       // Ignore typing errors
+    }
+
+    // Refresh typing indicator every 5 seconds (Telegram resets after ~5s)
+    const interval = setInterval(async () => {
+      try {
+        await bot.sendChatAction(parseInt(chatId), 'typing');
+      } catch {
+        // Stop if error
+        clearInterval(interval);
+        typingIntervals.delete(chatId);
+      }
+    }, 5000);
+
+    typingIntervals.set(chatId, interval);
+  } else {
+    // Stop typing indicator
+    const interval = typingIntervals.get(chatId);
+    if (interval) {
+      clearInterval(interval);
+      typingIntervals.delete(chatId);
     }
   }
 }
@@ -579,6 +633,41 @@ async function sendMessage(chatId: string, text: string): Promise<void> {
     logger.info({ chatId, length: text.length, chunks: chunks.length }, 'Message sent');
   } catch (err) {
     logger.error({ chatId, err: formatError(err) }, 'Failed to send message');
+  }
+}
+
+/**
+ * Quick reply button definition
+ */
+interface QuickReplyButton {
+  text: string;
+  callbackData: string;
+}
+
+/**
+ * Send a message with inline keyboard buttons
+ */
+async function sendMessageWithButtons(
+  chatId: string,
+  text: string,
+  buttons: QuickReplyButton[][],
+): Promise<void> {
+  try {
+    const inlineKeyboard = buttons.map((row) =>
+      row.map((btn) => ({
+        text: btn.text,
+        callback_data: btn.callbackData,
+      })),
+    );
+
+    await bot.sendMessage(parseInt(chatId), text, {
+      reply_markup: {
+        inline_keyboard: inlineKeyboard,
+      },
+    });
+    logger.info({ chatId, buttonRows: buttons.length }, 'Message with buttons sent');
+  } catch (err) {
+    logger.error({ chatId, err: formatError(err) }, 'Failed to send message with buttons');
   }
 }
 
@@ -1113,8 +1202,56 @@ async function connectTelegram(): Promise<void> {
   });
 
   // Handle polling errors
-  bot.on('polling_error', (err) => {
+  bot.on('polling_error', (err: Error) => {
     logger.error({ err: err.message }, 'Telegram polling error');
+  });
+
+  // Handle inline keyboard button clicks
+  bot.on('callback_query', async (query: TelegramBot.CallbackQuery) => {
+    const chatId = query.message?.chat.id.toString();
+    const data = query.data;
+
+    if (!chatId || !data) {
+      await bot.answerCallbackQuery(query.id);
+      return;
+    }
+
+    logger.info({ chatId, action: data }, 'Callback query received');
+
+    try {
+      // Acknowledge the button click
+      await bot.answerCallbackQuery(query.id);
+
+      // Route callback actions
+      const [action, ...params] = data.split(':');
+      const { t } = await import('./i18n.js');
+
+      switch (action) {
+        case 'confirm':
+          await sendMessage(chatId, t().confirmed);
+          break;
+        case 'cancel':
+          await sendMessage(chatId, t().cancelled);
+          break;
+        case 'retry':
+          // Re-trigger the last prompt (if stored)
+          await sendMessage(chatId, t().retrying);
+          break;
+        case 'feedback':
+          const rating = params[0];
+          logger.info({ chatId, rating }, 'User feedback received');
+          await sendMessage(chatId, rating === 'up' ? t().thanksFeedback : t().willImprove);
+          break;
+        default:
+          // Pass through to agent if unknown action
+          const group = registeredGroups[chatId];
+          if (group) {
+            await sendMessage(chatId, `處理中: ${data}...`);
+          }
+      }
+    } catch (err) {
+      logger.error({ chatId, err: formatError(err) }, 'Callback query error');
+    }
   });
 
   // Get bot info

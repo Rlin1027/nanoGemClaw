@@ -296,7 +296,17 @@ export async function runContainerAgent(
 
       // Track errors/success
       if (result.status === 'error') {
-        recordError(input.groupFolder, result.error || 'Unknown error');
+        const errorState = recordError(input.groupFolder, result.error || 'Unknown error');
+
+        // Send webhook if new error or threshold reached
+        if (errorState.consecutiveFailures === 1 || errorState.consecutiveFailures % 3 === 0) {
+          const { sendWebhookNotification } = await import('./webhook.js');
+          await sendWebhookNotification(
+            'error',
+            `Container error in group ${group.name}`,
+            { group: input.groupFolder, error: result.error, failures: errorState.consecutiveFailures }
+          );
+        }
       } else {
         resetErrors(input.groupFolder);
       }
