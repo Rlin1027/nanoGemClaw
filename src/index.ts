@@ -62,24 +62,33 @@ function loadState(): void {
   const state = loadJson<{
     last_timestamp?: string;
     last_agent_timestamp?: Record<string, string>;
+    language?: import('./i18n.js').Language;
   }>(statePath, {});
   lastTimestamp = state.last_timestamp || '';
   lastAgentTimestamp = state.last_agent_timestamp || {};
+
+  if (state.language) {
+    const { setLanguage } = require('./i18n.js');
+    setLanguage(state.language);
+  }
+
   sessions = loadJson(path.join(DATA_DIR, 'sessions.json'), {});
   registeredGroups = loadJson(
     path.join(DATA_DIR, 'registered_groups.json'),
     {},
   );
   logger.info(
-    { groupCount: Object.keys(registeredGroups).length },
+    { groupCount: Object.keys(registeredGroups).length, language: state.language || 'default' },
     'State loaded',
   );
 }
 
 function saveState(): void {
+  const { getLanguage } = require('./i18n.js');
   saveJson(path.join(DATA_DIR, 'router_state.json'), {
     last_timestamp: lastTimestamp,
     last_agent_timestamp: lastAgentTimestamp,
+    language: getLanguage(),
   });
   saveJson(path.join(DATA_DIR, 'sessions.json'), sessions);
 }
