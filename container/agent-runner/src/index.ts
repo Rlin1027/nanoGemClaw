@@ -347,6 +347,9 @@ IMPORTANT: To interact with the messaging system, you must write JSON files to s
 ${isMain ? `4. TO REGISTER A GROUP (main only) - Write to /workspace/ipc/tasks/:
    {"type":"register_group","jid":"...","name":"...","folder":"...","trigger":"@Andy"}` : ''}
 
+5. TO GENERATE AN IMAGE - Write to /workspace/ipc/tasks/:
+   {"type":"generate_image","prompt":"description of image to generate","chatJid":"${chatJid}"}
+
 WEB BROWSING:
 You have access to the \`agent-browser\` CLI tool for advanced web interaction (Javascript, screenshots, etc).
 Documentation is available at: \`/workspace/docs/agent-browser.md\`.

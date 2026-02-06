@@ -518,7 +518,16 @@ async function processMessage(msg: TelegramBot.Message): Promise<void> {
     if (mediaPath) {
       // Add media reference to content for the agent
       const containerMediaPath = `/workspace/group/media/${path.basename(mediaPath)}`;
-      content = `[Media: ${mediaInfo.type} at ${containerMediaPath}]\n${content}`;
+
+      // Transcribe voice messages using STT
+      if (mediaInfo.type === 'voice') {
+        const { transcribeAudio } = await import('./stt.js');
+        const transcription = await transcribeAudio(mediaPath);
+        content = `[Voice message transcription: "${transcription}"]\n[Audio file: ${containerMediaPath}]\n${content}`;
+        logger.info({ chatId, transcription: transcription.slice(0, 100) }, 'Voice message transcribed');
+      } else {
+        content = `[Media: ${mediaInfo.type} at ${containerMediaPath}]\n${content}`;
+      }
     }
   }
 
@@ -1198,6 +1207,33 @@ async function processTaskIpc(
           { data },
           'Invalid register_group request - missing required fields',
         );
+      }
+      break;
+
+    case 'generate_image':
+      if (data.prompt && data.chatJid) {
+        const { generateImage } = await import('./image-gen.js');
+        const targetGroup = Object.entries(registeredGroups).find(
+          ([jid]) => jid === data.chatJid,
+        )?.[1];
+
+        if (!targetGroup) {
+          logger.warn({ chatJid: data.chatJid }, 'Cannot generate image: group not found');
+          break;
+        }
+
+        const outputDir = path.join(GROUPS_DIR, targetGroup.folder, 'media');
+        const result = await generateImage(data.prompt, outputDir);
+
+        if (result.success && result.imagePath) {
+          // Send the generated image to Telegram
+          await bot.sendPhoto(data.chatJid, result.imagePath, {
+            caption: `🎨 Generated: ${data.prompt.slice(0, 100)}`,
+          });
+          logger.info({ chatJid: data.chatJid, prompt: data.prompt.slice(0, 50) }, 'Image generated and sent');
+        } else {
+          await sendMessage(data.chatJid, `❌ Image generation failed: ${result.error}`);
+        }
       }
       break;
 
