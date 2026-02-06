@@ -20,189 +20,123 @@
 
 ## なぜ NanoGemClaw？
 
-**NanoGemClaw** は [NanoClaw](https://github.com/gavrielc/nanoclaw) のフォークで、Claude Agent SDK を **Gemini CLI** に、WhatsApp を **Telegram** に置き換えています：
+**NanoGemClaw** は、隔離されたコンテナ内で **Gemini CLI** を実行する、軽量で安全、かつカスタマイズ可能な AI アシスタントです。
 
 | 機能 | NanoClaw | NanoGemClaw |
 |------|----------|-------------|
 | **エージェントランタイム** | Claude Agent SDK | Gemini CLI |
 | **メッセージング** | WhatsApp (Baileys) | Telegram Bot API |
 | **コスト** | Claude Max ($100/月) | 無料枠 (60リクエスト/分) |
-| **メモリファイル** | CLAUDE.md | GEMINI.md |
-| **モデル** | Claude 3.5 Sonnet | Gemini 2.5 Pro/Flash |
 | **メディアサポート** | テキストのみ | 写真、音声、オーディオ、動画、ドキュメント |
-
-同じコンテナ分離アーキテクチャ。異なるAIバックエンド。
+| **Web 閲覧** | 検索のみ | フル `agent-browser` (Playwright) |
+| **高度なツール** | - | STT (音声文字起こし), 画像生成, Webhooks |
 
 ---
 
-## 🚀 クイックスタート
+## 🚀 主な機能
+
+- **マルチモーダル I/O** - 写真、ボイスメッセージ、動画、ドキュメントを送信。Gemini がネイティブに処理します。
+- **音声文字起こし (STT)** - ボイスメッセージを自動的に文字起こしし、エージェントが分析します。
+- **画像生成** - **Imagen 3** を使用して画像を生成するようエージェントに依頼できます。
+- **ブラウザ自動化** - エージェントは `agent-browser` を使用して、複雑な Web タスク（操作、スクリーンショット）を実行します。
+- **マルチターンタスク追跡** - 複雑な多段階のバックグラウンドタスクを追跡・管理します。
+- **パーソナリティのカスタマイズ** - `/admin persona` を介して、ボットの性格や動作を定義できます。
+- **多言語サポート (i18n)** - 日本語、繁体字中国語、簡体字中国語、英語、スペイン語をフルサポート。
+- **コンテナ分離** - すべてのグループは独自のサンドボックス（Apple Container または Docker）で実行されます。
+
+---
+
+## 🛠️ インストール
 
 ### 前提条件
 
 | ツール | 用途 | インストール |
 |--------|------|--------------|
-| **Node.js 20+** | メインプロセスを実行 | [nodejs.org](https://nodejs.org) |
-| **Gemini CLI** | AIエージェントコア | `npm install -g @google/gemini-cli` |
-| **コンテナランタイム** | サンドボックス環境 | 以下を参照 |
+| **Node.js 20+** | ロジックエンジン | [nodejs.org](https://nodejs.org) |
+| **Gemini CLI** | AI エージェントコア | `npm install -g @google/gemini-cli` |
+| **FFmpeg** | オーディオ処理 | `brew install ffmpeg` (STT に必要) |
 
-**コンテナランタイムをインストール（どちらか選択）:**
+### クイックスタート
 
-```bash
-# macOS - Apple Container（推奨）
-brew install apple-container
+1. **クローンとインストール:**
 
-# macOS/Linux - Docker
-brew install --cask docker   # macOS
-# または https://docker.com からダウンロード
-```
+   ```bash
+   git clone https://github.com/Rlin1027/NanoGemClaw.git
+   cd NanoGemClaw
+   npm install
+   ```
 
----
+2. **ボットの設定:**
+   - Telegram の **@BotFather** からトークンを取得します。
+   - `.env.example` を参考に `.env` ファイルを作成します。
+   - `npm run setup:telegram` を実行して検証します。
 
-### ステップ 1: リポジトリをクローン
+3. **ビルドと実行:**
 
-```bash
-git clone https://github.com/Rlin1027/NanoGemClaw.git
-cd NanoGemClaw   # 重要：プロジェクトフォルダに入る！
-npm install
-```
-
-> ⚠️ **注意**：`git clone` は `NanoGemClaw` という名前のフォルダを作成します。すべてのコマンドはこのフォルダ内で実行する必要があります。
-
----
-
-### ステップ 2: Telegram Bot を作成
-
-1. Telegram で **@BotFather** を検索
-2. `/newbot` を送信
-3. 指示に従ってBotに名前を付ける
-4. BotFather が提供する **Token** をコピー
-
-```bash
-# Token を含む .env ファイルを作成
-echo "TELEGRAM_BOT_TOKEN=123456789:ABCdefGHIjklMNOpqrsTUVwxyz" > .env
-```
+   ```bash
+   cd container && ./build.sh && cd ..
+   npm run dev
+   ```
 
 ---
 
-### ステップ 3: Bot Token を検証
+## 📖 使用例
 
-```bash
-npm run setup:telegram
-```
+### メッセージングと生産性
 
-成功時の出力:
+- `@Andy このボイスメッセージを翻訳して要約して`
+- `@Andy 未来的なサイバーパンク都市の 16:9 の画像を生成して`
+- `@Andy https://news.google.com を閲覧して、主要な見出しを教えて`
 
-```
-✓ Bot token is valid!
-  Bot Username: @YourBotName
-```
+### タスク自動化
 
----
-
-### ステップ 4: Gemini CLI にログイン (OAuth)
-
-初回使用時は Google ログインが必要です：
-
-```bash
-gemini
-```
-
-ターミナルの指示に従って OAuth ログインを完了してください。認証済みの資格情報は自動的にコンテナと共有されます。
-
-> 💡 **ヒント**: API Key を使用する場合は、`.env` ファイルに `GEMINI_API_KEY=your_key` を追加してください。
+- `@Andy 毎朝午前 8 時に天気をチェックして、服装を提案して`
+- `@Andy 私の Web サイトを監視し、ダウンした場合は Webhook 通知を送信して`
 
 ---
 
-### ステップ 5: エージェントコンテナをビルド
+## ⚙️ 管理
 
-```bash
-cd container
-./build.sh
-cd ..
-```
+ボットに直接以下のコマンドを送信します：
 
-これにより、Gemini CLI と必要なツールを含む `nanogemclaw-agent:latest` イメージがビルドされます。
+- `/admin language <lang>` - ボットのインターフェース言語を切り替えます。
+- `/admin persona <name>` - ボットのパーソナリティ設定を変更します。
+- `/admin report` - 日次の活動概要レポートを取得します。
 
 ---
 
-### ステップ 6: Telegram グループを設定
+## 🏗️ アーキテクチャ
 
-1. Bot を Telegram グループに追加
-2. **Bot を管理者に昇格**（メッセージを読むために必要）
-3. グループ ID をメモ（Bot にメッセージを送信後、ログで確認できます）
+```mermaid
+graph LR
+    TG[Telegram] --> DB[(SQLite)]
+    DB --> Main[Node.js Host]
+    Main --> STT[ffmpeg/STT]
+    Main --> IPC[FS IPC]
+    IPC --> Container[Gemini Agent]
+    Container --> Browser[agent-browser]
+```
+
+- **ホスト (Node.js)**: Telegram API、STT 轉換、コンテナのライフサイクルを処理します。
+- **コンテナ (Alpine)**: Gemini CLI を実行します。`agent-browser` を介してインターネットにアクセスします。ホストから分離されています。
+- **永続化**: タスクの保存には SQLite、セッションと状態の保存には JSON を使用します。
 
 ---
 
-### ステップ 7: サービスを開始
+## 🛠️ トラブルシューティング
 
-```bash
-npm run dev
-```
-
-成功時の出力:
-
-```
-✓ NanoGemClaw running (trigger: @Andy)
-  Bot: @YourBotName
-  Registered groups: 0
-```
+- **ボットが応答しない？** `npm run logs` を確認し、ボットがグループの管理者であることを確認してください。
+- **STT が失敗する？** ホストシステムに `ffmpeg` がインストールされていることを確認してください (`brew install ffmpeg`)。
+- **メディアを処理できない？** `.env` に `GEMINI_API_KEY` が設定されているか確認してください。
+- **コンテナの問題？** `./container/build.sh` を実行して、最新のイメージが準備されているか確認してください。
 
 ---
 
-### ステップ 8: グループを登録
-
-初回は、プライベートチャット（Bot との 1:1 会話）でこのコマンドを送信：
-
-```
-@Andy register this group as main
-```
-
-これにより、現在のチャットがフル管理者権限を持つ「メイングループ」として設定されます。
-
-後で他のグループを追加するには、メイングループから送信：
-
-```
-@Andy join the "My Group Name" group
-```
-
----
-
-## ✅ 完了
-
-これで、登録済みのグループで AI アシスタントとチャットできます：
-
-```
-@Andy こんにちは
-@Andy 今日の天気を教えて
-@Andy 毎朝9時に会議をリマインドして
-```
-
----
-
-## サポート機能
-
-- **Telegram I/O** - スマートフォンから Gemini にメッセージ送信（写真、音声、動画、ドキュメント対応）
-- **分離されたグループコンテキスト** - 各グループは独自の `GEMINI.md` メモリ、分離されたファイルシステムを持ち、独自のコンテナサンドボックスで実行
-- **メインチャンネル** - 管理制御用のプライベートチャンネル；他のグループは完全に分離
-- **スケジュールタスク** - Gemini を実行してメッセージを送信できる定期ジョブ
-- **Web アクセス** - `agent-browser` によるブラウザ自動化で検索とコンテンツ取得
-- **長期記憶** - 最近のアーカイブされた会話を自動的にコンテキストにロード（Gemini の 2M トークンウィンドウを活用）
-- **コンテナ分離** - エージェントは Apple Container (macOS) または Docker (macOS/Linux) でサンドボックス化
-
-## トラブルシューティング
-
-| 問題 | 解決策 |
-|------|--------|
-| `container: command not found` | Apple Container または Docker をインストール |
-| Bot が応答しない | Bot が管理者で Token が正しいことを確認 |
-| `Gemini CLI not found` | `npm install -g @google/gemini-cli` を実行 |
-| OAuth が失敗 | `gemini` を実行して再ログイン |
-
-## ライセンス
+## 授権
 
 MIT
 
 ## クレジット
 
-- オリジナル [NanoClaw](https://github.com/gavrielc/nanoclaw) by [@gavrielc](https://github.com/gavrielc)
-- Powered by [Gemini CLI](https://github.com/google-gemini/gemini-cli)
+- 原始 [NanoClaw](https://github.com/gavrielc/nanoclaw) by [@gavrielc](https://github.com/gavrielc)
+- 由 [Gemini CLI](https://github.com/google-gemini/gemini-cli) 驅動

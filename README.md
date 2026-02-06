@@ -7,7 +7,7 @@
 </p>
 
 <p align="center">
-  <em>Forked from <a href="https://github.com/gavrielc/nanoclaw">NanoClaw</a> - replaced Claude Agent SDK with Gemini CLI, WhatsApp with Telegram</em>
+  <em>Forked from <a href="https://github.com/gavrielc/nanoclaw">NanoClaw</a> - replaced Claude Agent SDK with Gemini CLI and WhatsApp with Telegram</em>
 </p>
 
 <p align="center">
@@ -20,256 +20,117 @@
 
 ## Why NanoGemClaw?
 
-**NanoGemClaw** is a fork of [NanoClaw](https://github.com/gavrielc/nanoclaw) that replaces Claude Agent SDK with **Gemini CLI** and WhatsApp with **Telegram**:
+**NanoGemClaw** is a lightweight, secure, and customizable AI assistant that runs **Gemini CLI** in isolated containers.
 
 | Feature | NanoClaw | NanoGemClaw |
 |---------|----------|-------------|
 | **Agent Runtime** | Claude Agent SDK | Gemini CLI |
 | **Messaging** | WhatsApp (Baileys) | Telegram Bot API |
 | **Cost** | Claude Max ($100/mo) | Free tier (60 req/min) |
-| **Memory File** | CLAUDE.md | GEMINI.md |
-| **Model** | Claude 3.5 Sonnet | Gemini 2.5 Pro/Flash |
 | **Media Support** | Text only | Photo, Voice, Audio, Video, Document |
-
-Same container isolation. Same architecture. Different AI backend.
+| **Web Browsing** | Search only | Full `agent-browser` (Playwright) |
+| **Advanced Tools** | - | STT, Image Gen, Webhooks |
 
 ---
 
-## 🚀 Getting Started
+## 🚀 Key Features
+
+- **Multi-modal I/O** - Send photos, voice messages, videos, or documents. Gemini processes them natively.
+- **Speech-to-Text (STT)** - Voice messages are automatically transcribed and analyzed.
+- **Image Generation** - Ask the agent to create images using **Imagen 3**.
+- **Browser Automation** - Agents use `agent-browser` for complex web tasks (interaction, screenshots).
+- **Multi-turn Task Tracking** - Track and manage complex, multi-step background tasks.
+- **Persona Customization** - Define your bot's personality and behavior via `/admin persona`.
+- **i18n Support** - Full interface support for English, Chinese, Japanese, and Spanish.
+- **Container Isolation** - Every group runs in its own sandbox (Apple Container or Docker).
+
+---
+
+## 🛠️ Installation
 
 ### Prerequisites
 
-Before you start, make sure you have the following tools installed:
-
 | Tool | Purpose | Installation |
 |------|---------|--------------|
-| **Node.js 20+** | Runs the main process | [nodejs.org](https://nodejs.org) |
+| **Node.js 20+** | Logic engine | [nodejs.org](https://nodejs.org) |
 | **Gemini CLI** | AI Agent Core | `npm install -g @google/gemini-cli` |
-| **Container Runtime** | Sandboxing env | See below |
+| **FFmpeg** | Audio processing | `brew install ffmpeg` (Required for STT) |
 
-**Install Container Runtime (Choose one):**
+### Quick Start
 
-```bash
-# macOS - Apple Container (Recommended)
-brew install apple-container
+1. **Clone & Install:**
 
-# macOS/Linux - Docker
-brew install --cask docker   # macOS
-# Or download from https://docker.com
-```
+   ```bash
+   git clone https://github.com/Rlin1027/NanoGemClaw.git
+   cd NanoGemClaw
+   npm install
+   ```
 
----
+2. **Configure Bot:**
+   - Get a token from **@BotFather** on Telegram.
+   - Create `.env` based on `.env.example`.
+   - Run `npm run setup:telegram` to verify.
 
-### Step 1: Clone Repository
+3. **Build & Run:**
 
-```bash
-git clone https://github.com/Rlin1027/NanoGemClaw.git
-cd NanoGemClaw   # Important: Enter the project folder!
-npm install
-```
-
-> ⚠️ **Note**: `git clone` creates a folder named `NanoGemClaw`. All commands must be run from inside this folder.
-
----
-
-### Step 2: Create Telegram Bot
-
-1. Search for **@BotFather** in Telegram
-2. Send `/newbot`
-3. Follow instructions to name your bot
-4. Copy the **Token** provided by BotFather
-
-```bash
-# Create .env file with your Token
-echo "TELEGRAM_BOT_TOKEN=123456789:ABCdefGHIjklMNOpqrsTUVwxyz" > .env
-```
+   ```bash
+   cd container && ./build.sh && cd ..
+   npm run dev
+   ```
 
 ---
 
-### Step 3: Verify Bot Token
+## 📖 Usage Examples
 
-```bash
-npm run setup:telegram
-```
+### Messaging & Productivity
 
-Success output:
+- `@Andy translate this voice message and summarize it`
+- `@Andy generate a 16:9 image of a futuristic cyberpunk city`
+- `@Andy browse https://news.google.com and give me the top headlines`
 
-```
-✓ Bot token is valid!
-  Bot Username: @YourBotName
-```
+### Task Automation
 
----
-
-### Step 4: Login to Gemini CLI (OAuth)
-
-First time use requires Google login:
-
-```bash
-gemini
-```
-
-Follow the terminal prompts to complete OAuth login. Authenticated credentials will be automatically shared with the container.
-
-> 💡 **Tip**: If you prefer using an API Key, add `GEMINI_API_KEY=your_key` to your `.env` file.
+- `@Andy every morning at 8am, check the weather and suggest what to wear`
+- `@Andy monitor my website and send a webhook notification if it goes down`
 
 ---
 
-### Step 5: Build Agent Container
+## ⚙️ Administration
 
-```bash
-cd container
-./build.sh
-cd ..
-```
+Send these commands directly to the bot:
 
-This builds the `nanogemclaw-agent:latest` image containing Gemini CLI and all necessary tools.
+- `/admin language <lang>` - Switch bot interface language.
+- `/admin persona <name>` - Change bot personality.
+- `/admin report` - Get a daily activity summary.
 
 ---
 
-### Step 6: Configure Telegram Group
+## 🏗️ Architecture
 
-1. Add your Bot to a Telegram group
-2. **Promote Bot to Admin** (Required to see messages)
-3. Note the Group ID (You can see it in logs after messaging the bot)
+```mermaid
+graph LR
+    TG[Telegram] --> DB[(SQLite)]
+    DB --> Main[Node.js Host]
+    Main --> STT[ffmpeg/STT]
+    Main --> IPC[FS IPC]
+    IPC --> Container[Gemini Agent]
+    Container --> Browser[agent-browser]
+```
+
+- **Host (Node.js)**: Handles Telegram API, STT conversion, and container lifecycle.
+- **Container (Alpine)**: Runs Gemini CLI. Accesses internet via `agent-browser`. Isolated from host.
+- **Persistence**: SQLite for turns/tasks; JSON for sessions/state.
 
 ---
 
-### Step 7: Start Service
+## 🛠️ Troubleshooting
 
-```bash
-npm run dev
-```
-
-Success output:
-
-```
-✓ NanoGemClaw running (trigger: @Andy)
-  Bot: @YourBotName
-  Registered groups: 0
-```
+- **Bot not responding?** Check `npm run logs` and ensure the bot is an Admin in the group.
+- **STT failing?** Ensure `ffmpeg` is installed on your host system (`brew install ffmpeg`).
+- **Media not processing?** Verify your `GEMINI_API_KEY` is set in `.env`.
+- **Container issues?** Run `./container/build.sh` to ensure the latest image is ready.
 
 ---
-
-### Step 8: Register Group
-
-For the first time, send this command in your private chat (1:1 with Bot):
-
-```
-@Andy register this group as main
-```
-
-This sets the current chat as the "Main Group" with full admin rights.
-
-To add other groups later, send this from the Main Group:
-
-```
-@Andy join the "My Group Name" group
-```
-
----
-
-## ✅ All Done
-
-You can now chat with your AI assistant in any registered group:
-
-```
-@Andy Hello
-@Andy check the weather for today
-@Andy remind me to have a meeting every morning at 9am
-```
-
----
-
-## What It Supports
-
-- **Telegram I/O** - Message Gemini from your phone (photo, voice, video, document supported)
-- **Isolated group context** - Each group has its own `GEMINI.md` memory, isolated filesystem, and runs in its own container sandbox
-- **Main channel** - Your private channel for admin control; every other group is completely isolated
-- **Scheduled tasks** - Recurring jobs that run Gemini and can message you back
-- **Web access** - Search and fetch content with browser automation (`agent-browser`)
-- **Long-term memory** - Automatically loads recent archived conversations into context (utilizing Gemini's 2M token window)
-- **Container isolation** - Agents sandboxed in Apple Container (macOS) or Docker (macOS/Linux)
-
-## Usage Examples
-
-Talk to your assistant with the trigger word (default: `@Andy`):
-
-```text
-@Andy send an overview of the sales pipeline every weekday morning at 9am
-@Andy review the git history for the past week each Friday and update the README
-@Andy every Monday at 8am, compile news on AI developments from Hacker News
-```
-
-From the main channel, you can manage groups and tasks:
-
-```text
-@Andy list all scheduled tasks across groups
-@Andy pause the Monday briefing task
-@Andy join the "Family Chat" group
-```
-
-## Customizing
-
-There are no configuration files to learn. Just tell Gemini CLI what you want:
-
-- "Change the trigger word to @Bob"
-- "Remember in the future to make responses shorter and more direct"
-- "Add a custom greeting when I say good morning"
-- "Store conversation summaries weekly"
-
-## Philosophy
-
-**Small enough to understand.** One process, a few source files. No microservices, no message queues, no abstraction layers.
-
-**Secure by isolation.** Agents run in Linux containers. They can only see what's explicitly mounted.
-
-**Built for one user.** Fork it and customize it to match your exact needs.
-
-**Free to use.** Gemini CLI offers 60 requests/minute on the free tier.
-
-## Architecture
-
-```text
-Telegram Bot API --> SQLite --> Polling loop --> Container (Gemini CLI) --> Response
-```
-
-Single Node.js process. Agents execute in isolated Linux containers with mounted directories. IPC via filesystem.
-
-Key files:
-
-- `src/index.ts` - Main app: Telegram connection, routing, IPC
-- `src/container-runner.ts` - Spawns agent containers
-- `src/task-scheduler.ts` - Runs scheduled tasks
-- `src/db.ts` - SQLite operations
-- `groups/*/GEMINI.md` - Per-group memory
-
-## Troubleshooting
-
-| Issue | Solution |
-|-------|----------|
-| `container: command not found` | Install Apple Container on NanoClaw |
-| Bot not responding | Ensure Bot is Admin and Token is correct |
-| `Gemini CLI not found` | Run `npm install -g @google/gemini-cli` |
-| OAuth failed | Run `gemini` to login again |
-
-## FAQ
-
-**Why Telegram instead of WhatsApp?**
-
-Telegram Bot API is more stable, doesn't require QR code scanning, and has better multimedia support.
-
-**Can I run this on Linux?**
-
-Yes. The build script automatically uses Docker if Apple Container is not available.
-
-**Is this secure?**
-
-Agents run in containers and can only access explicitly mounted directories. See [docs/SECURITY.md](docs/SECURITY.md).
-
-## Contributing
-
-**Don't add features. Add skills.** Contribute skill files (`container/skills/your-skill/SKILL.md`) that teach Gemini CLI new capabilities.
 
 ## License
 

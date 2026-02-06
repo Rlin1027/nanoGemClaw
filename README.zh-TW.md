@@ -20,174 +20,115 @@
 
 ## 為什麼選擇 NanoGemClaw？
 
-**NanoGemClaw** 是 [NanoClaw](https://github.com/gavrielc/nanoclaw) 的 Fork，將 Claude Agent SDK 替換為 **Gemini CLI**，WhatsApp 替換為 **Telegram**：
+**NanoGemClaw** 是一個輕量、安全且可自訂的 AI 助手，在隔離的容器中執行 **Gemini CLI**。
 
 | 功能 | NanoClaw | NanoGemClaw |
 |------|----------|-------------|
 | **Agent 運行時** | Claude Agent SDK | Gemini CLI |
 | **訊息平台** | WhatsApp (Baileys) | Telegram Bot API |
 | **費用** | Claude Max ($100/月) | 免費方案 (60 次/分鐘) |
-| **記憶檔案** | CLAUDE.md | GEMINI.md |
-| **模型** | Claude 3.5 Sonnet | Gemini 2.5 Pro/Flash |
 | **多媒體支援** | 僅文字 | 圖片、語音、音訊、影片、文件 |
-
-相同的容器隔離架構，不同的 AI 後端。
+| **網頁瀏覽** | 僅搜尋 | 完整 `agent-browser` (Playwright) |
+| **進階工具** | - | STT (語音轉文字), 圖片生成, Webhooks |
 
 ---
 
-## 🚀 快速開始
+## 🚀 核心功能
+
+- **多模態 I/O** - 傳送圖片、語音訊息、影片或文件，Gemini 會直接處理。
+- **語音轉文字 (STT)** - 語音訊息會自動轉錄並由 Agent 進行分析。
+- **圖片生成** - 要求 Agent 使用 **Imagen 3** 建立圖片。
+- **瀏覽器自動化** - Agent 使用 `agent-browser` 處理複雜網頁任務（互動、截圖）。
+- **多輪任務追蹤** - 追蹤並管理複雜的多步驟背景任務。
+- **人格定義 (Persona)** - 透過 `/admin persona` 定義機器人的個性和行為。
+- **多語言支援 (i18n)** - 介面完整支援繁中、簡中、英文、日文及西班牙文。
+- **容器隔離** - 每個群組在各自的沙盒（Apple Container 或 Docker）中執行。
+
+---
+
+## 🛠️ 安裝說明
 
 ### 前置需求
 
 | 工具 | 用途 | 安裝方式 |
 |------|------|----------|
-| **Node.js 20+** | 執行主程式 | [nodejs.org](https://nodejs.org) |
+| **Node.js 20+** | 邏輯引擎 | [nodejs.org](https://nodejs.org) |
 | **Gemini CLI** | AI Agent 核心 | `npm install -g @google/gemini-cli` |
-| **容器執行環境** | 沙盒環境 | 見下方 |
+| **FFmpeg** | 音訊處理 | `brew install ffmpeg` (STT 必需) |
 
-**安裝容器執行環境（擇一）：**
+### 快速開始
 
-```bash
-# macOS - Apple Container（推薦）
-brew install apple-container
+1. **複製與安裝：**
 
-# macOS/Linux - Docker
-brew install --cask docker   # macOS
-# 或從 https://docker.com 下載
-```
+   ```bash
+   git clone https://github.com/Rlin1027/NanoGemClaw.git
+   cd NanoGemClaw
+   npm install
+   ```
 
----
+2. **設定機器人：**
+   - 從 Telegram 的 **@BotFather** 取得 Token。
+   - 根據 `.env.example` 建立 `.env` 檔案。
+   - 執行 `npm run setup:telegram` 進行驗證。
 
-### 步驟 1: 複製專案
+3. **建置與執行：**
 
-```bash
-git clone https://github.com/Rlin1027/NanoGemClaw.git
-cd NanoGemClaw   # 重要：進入專案資料夾！
-npm install
-```
-
-> ⚠️ **注意**：`git clone` 會建立一個名為 `NanoGemClaw` 的資料夾。所有指令都必須在此資料夾內執行。
-
----
-
-### 步驟 2: 建立 Telegram Bot
-
-1. 在 Telegram 搜尋 **@BotFather**
-2. 發送 `/newbot`
-3. 依照指示設定 Bot 名稱
-4. 複製 BotFather 回傳的 **Token**
-
-```bash
-# 建立 .env 檔案並填入 Token
-echo "TELEGRAM_BOT_TOKEN=123456789:ABCdefGHIjklMNOpqrsTUVwxyz" > .env
-```
+   ```bash
+   cd container && ./build.sh && cd ..
+   npm run dev
+   ```
 
 ---
 
-### 步驟 3: 驗證 Bot Token
+## 📖 使用範例
 
-```bash
-npm run setup:telegram
-```
+### 訊息處理與生產力
 
-成功輸出：
+- `@Andy 翻譯這段語音訊息並摘要`
+- `@Andy 生成一張 16:9 的未來網路龐克城市圖片`
+- `@Andy 瀏覽 https://news.google.com 並告訴我今日頭條`
 
-```
-✓ Bot token is valid!
-  Bot Username: @YourBotName
-```
+### 任務自動化
 
----
-
-### 步驟 4: 登入 Gemini CLI (OAuth)
-
-首次使用需要登入 Google 帳號：
-
-```bash
-gemini
-```
-
-依照終端機指示完成 OAuth 登入。登入後的憑證會自動共享給容器使用。
-
-> 💡 **提示**：如果您偏好使用 API Key，可以在 `.env` 加入 `GEMINI_API_KEY=your_key`
+- `@Andy 每天早上 8 點檢查天氣並建議穿搭`
+- `@Andy 監控我的網站，如果斷線請發送 Webhook 通知`
 
 ---
 
-### 步驟 5: 建置 Agent 容器
+## ⚙️ 管理控制
 
-```bash
-cd container
-./build.sh
-cd ..
-```
+直接對機器人發送以下指令：
 
-這會建立 `nanogemclaw-agent:latest` 映像檔，包含 Gemini CLI 和所有必要工具。
+- `/admin language <lang>` - 切換機器人介面語言。
+- `/admin persona <name>` - 變更機器人人格設定。
+- `/admin report` - 取得每日活動摘要報告。
 
 ---
 
-### 步驟 6: 設定 Telegram 群組
+## 🏗️ 架構設計
 
-1. 將您的 Bot 加入一個 Telegram 群組
-2. **將 Bot 設為管理員**（這樣它才能讀取訊息）
-3. 記下群組的 Chat ID（可透過對 Bot 發訊息後查看 log）
+```mermaid
+graph LR
+    TG[Telegram] --> DB[(SQLite)]
+    DB --> Main[Node.js Host]
+    Main --> STT[ffmpeg/STT]
+    Main --> IPC[FS IPC]
+    IPC --> Container[Gemini Agent]
+    Container --> Browser[agent-browser]
+```
+
+- **宿主機 (Node.js)**：處理 Telegram API、STT 轉換及容器生命週期。
+- **容器 (Alpine)**：執行 Gemini CLI。透過 `agent-browser` 存取網路。與宿主機隔離。
+- **持久化**：使用 SQLite 儲存任務；JSON 儲存 Session 與狀態。
 
 ---
 
-### 步驟 7: 啟動服務
+## 🛠️ 問題排解
 
-```bash
-npm run dev
-```
-
-成功輸出：
-
-```
-✓ NanoGemClaw running (trigger: @Andy)
-  Bot: @YourBotName
-  Registered groups: 0
-```
-
----
-
-### 步驟 8: 註冊群組
-
-首次使用時，在您的私人對話（與 Bot 的 1:1 對話）中發送：
-
-```
-@Andy register this group as main
-```
-
-這會將目前的對話設為「主群組」，獲得完整管理權限。
-
-之後要加入其他群組，從主群組發送：
-
-```
-@Andy join the "My Group Name" group
-```
-
----
-
-## ✅ 完成
-
-現在您可以在任何已註冊的群組中與 AI 助手對話：
-
-```
-@Andy 你好
-@Andy 幫我查一下今天的天氣
-@Andy 每天早上 9 點提醒我開會
-```
-
----
-
-## 支援功能
-
-- **Telegram I/O** - 從手機傳訊給 Gemini（支援圖片、語音、影片、文件）
-- **隔離的群組上下文** - 每個群組有獨立的 `GEMINI.md` 記憶、獨立檔案系統，運行在獨立的容器沙盒中
-- **主要頻道** - 您的私人頻道用於管理控制；其他群組完全隔離
-- **排程任務** - 定期執行的任務，可以傳訊息回報
-- **網頁存取** - 使用 `agent-browser` 進行搜尋和瀏覽
-- **長期記憶** - 自動載入最近的對話存檔到上下文中（利用 Gemini 的 2M token 視窗）
-- **容器隔離** - Agent 在 Apple Container (macOS) 或 Docker (macOS/Linux) 中沙盒運行
+- **機器人無回應？** 檢查 `npm run logs` 並確認機器人已設為群組管理員。
+- **STT 失敗？** 確認宿主機已安裝 `ffmpeg` (`brew install ffmpeg`)。
+- **無法處理多媒體？** 確認 `.env` 中的 `GEMINI_API_KEY` 已正確設定。
+- **容器問題？** 執行 `./container/build.sh` 確保映像檔為最新版本。
 
 ## 常見問題排解
 
