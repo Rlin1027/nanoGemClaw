@@ -250,6 +250,95 @@ async function downloadMedia(
 }
 
 // ============================================================================
+// Admin Commands (Main Group Only)
+// ============================================================================
+
+const ADMIN_COMMANDS = {
+  stats: 'Show usage statistics',
+  groups: 'List all registered groups',
+  tasks: 'List all scheduled tasks',
+  help: 'Show available admin commands',
+} as const;
+
+async function handleAdminCommand(
+  command: string,
+  args: string[],
+): Promise<string> {
+  const { getAllTasks } = await import('./db.js');
+
+  switch (command) {
+    case 'stats': {
+      const groupCount = Object.keys(registeredGroups).length;
+      const uptime = process.uptime();
+      const uptimeHours = Math.floor(uptime / 3600);
+      const uptimeMinutes = Math.floor((uptime % 3600) / 60);
+
+      return `📊 **NanoGemClaw Stats**
+
+• Registered Groups: ${groupCount}
+• Uptime: ${uptimeHours}h ${uptimeMinutes}m
+• Memory: ${Math.round(process.memoryUsage().heapUsed / 1024 / 1024)}MB
+• Node Version: ${process.version}`;
+    }
+
+    case 'groups': {
+      const groups = Object.values(registeredGroups);
+      if (groups.length === 0) {
+        return '📁 No groups registered.';
+      }
+
+      const groupList = groups.map((g, i) => {
+        const isMain = g.folder === MAIN_GROUP_FOLDER;
+        const searchStatus = g.enableWebSearch !== false ? '🔍' : '';
+        const hasPrompt = g.systemPrompt ? '💬' : '';
+        return `${i + 1}. **${g.name}** ${isMain ? '(main)' : ''} ${searchStatus}${hasPrompt}
+   📁 ${g.folder} | 🎯 ${g.trigger}`;
+      }).join('\n');
+
+      return `📁 **Registered Groups** (${groups.length})
+
+${groupList}
+
+Legend: 🔍=Search 💬=Custom Prompt`;
+    }
+
+    case 'tasks': {
+      const tasks = getAllTasks();
+      if (tasks.length === 0) {
+        return '📅 No scheduled tasks.';
+      }
+
+      const taskList = tasks.slice(0, 10).map((t, i) => {
+        const status = t.status === 'active' ? '✅' : t.status === 'paused' ? '⏸️' : '✓';
+        const nextRun = t.next_run ? new Date(t.next_run).toLocaleString() : 'N/A';
+        return `${i + 1}. ${status} **${t.group_folder}**
+   📋 ${t.prompt.slice(0, 50)}${t.prompt.length > 50 ? '...' : ''}
+   ⏰ ${t.schedule_type}: ${t.schedule_value} | Next: ${nextRun}`;
+      }).join('\n');
+
+      const moreText = tasks.length > 10 ? `\n\n_...and ${tasks.length - 10} more tasks_` : '';
+
+      return `📅 **Scheduled Tasks** (${tasks.length})
+
+${taskList}${moreText}`;
+    }
+
+    case 'help':
+    default: {
+      const commandList = Object.entries(ADMIN_COMMANDS)
+        .map(([cmd, desc]) => `• \`/admin ${cmd}\` - ${desc}`)
+        .join('\n');
+
+      return `🛠️ **Admin Commands**
+
+${commandList}
+
+_Admin commands are only available in the main group._`;
+    }
+  }
+}
+
+// ============================================================================
 // Message Processing
 // ============================================================================
 
@@ -265,6 +354,22 @@ async function processMessage(msg: TelegramBot.Message): Promise<void> {
   // Extract content (text or caption)
   let content = msg.text || msg.caption || '';
   const isMainGroup = group.folder === MAIN_GROUP_FOLDER;
+
+  // Handle admin commands (main group only)
+  if (isMainGroup && content.startsWith('/admin')) {
+    const parts = content.slice(7).trim().split(/\s+/);
+    const adminCmd = parts[0] || 'help';
+    const adminArgs = parts.slice(1);
+
+    try {
+      const response = await handleAdminCommand(adminCmd, adminArgs);
+      await sendMessage(chatId, response);
+    } catch (err) {
+      logger.error({ err: formatError(err) }, 'Admin command failed');
+      await sendMessage(chatId, '❌ Admin command failed. Check logs for details.');
+    }
+    return;
+  }
 
   // Main group responds to all messages; other groups require trigger prefix
   if (!isMainGroup && !TRIGGER_PATTERN.test(content)) return;
