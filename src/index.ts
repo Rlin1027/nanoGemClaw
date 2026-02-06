@@ -1222,7 +1222,7 @@ async function connectTelegram(): Promise<void> {
   bot = new TelegramBot(TELEGRAM_BOT_TOKEN, { polling: true });
 
   // Handle incoming messages
-  bot.on('message', async (msg) => {
+  bot.on('message', async (msg: TelegramBot.Message) => {
     const chatId = msg.chat.id.toString();
     const content = msg.text || msg.caption || '';
     const senderId = msg.from?.id.toString() || '';
