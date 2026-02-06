@@ -85,6 +85,9 @@ export function completeTask(chatId: string): void {
 /**
  * Cancel/Fail a task
  */
+/**
+ * Cancel/Fail a task
+ */
 export function failTask(chatId: string, reason: string): void {
     const task = activeTasks.get(chatId);
     if (task) {
@@ -92,4 +95,35 @@ export function failTask(chatId: string, reason: string): void {
         logger.info({ chatId, taskId: task.id, reason }, 'Task failed');
         activeTasks.delete(chatId);
     }
+}
+
+/**
+ * Cleanup stale tasks
+ */
+export function cleanupStaleTasks(): void {
+    const now = Date.now();
+    const STALE_THRESHOLD_MS = 30 * 60 * 1000; // 30 minutes
+    let cleanupCount = 0;
+
+    for (const [chatId, task] of activeTasks.entries()) {
+        const lastUpdate = new Date(task.updatedAt).getTime();
+        if (now - lastUpdate > STALE_THRESHOLD_MS) {
+            activeTasks.delete(chatId);
+            cleanupCount++;
+            logger.info({ chatId, taskId: task.id }, 'Stale task cleaned up');
+        }
+    }
+
+    if (cleanupCount > 0) {
+        logger.info({ cleanupCount }, 'Task cleanup completed');
+    }
+}
+
+/**
+ * Start task cleanup scheduler
+ */
+export function startTaskCleanupScheduler(): void {
+    // Check every 10 minutes
+    setInterval(cleanupStaleTasks, 10 * 60 * 1000);
+    logger.info({}, 'Task cleanup scheduler started');
 }

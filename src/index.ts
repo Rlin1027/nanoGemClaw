@@ -1329,6 +1329,8 @@ async function connectTelegram(): Promise<void> {
   });
   startIpcWatcher();
   startMediaCleanupScheduler();
+  const { startTaskCleanupScheduler } = await import('./task-tracker.js');
+  startTaskCleanupScheduler();
 
   console.log(`\n✓ NanoGemClaw running (trigger: @${ASSISTANT_NAME})`);
   console.log(`  Bot: @${me.username}`);
