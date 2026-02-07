@@ -107,6 +107,11 @@ async function runGeminiAgent(input: ContainerInput): Promise<ContainerOutput> {
     prompt = `${input.memoryContext}\n\n${prompt}`;
   }
 
+  // Attach media file using Gemini CLI's @ syntax for native multimodal input
+  if (input.mediaPath) {
+    prompt += `\n@${input.mediaPath}`;
+  }
+
   // Add system context about available IPC tools
   const systemContext = buildSystemContext(input);
   prompt = `${systemContext}\n\n---\n\nUser Request:\n${prompt}`;
