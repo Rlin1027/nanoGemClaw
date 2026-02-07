@@ -181,13 +181,15 @@ function buildVolumeMounts(
   }
 
   // Global Gemini directory for OAuth credentials and session data
-  // Read-only: per-group session dir (mounted below) handles writes to ~/.gemini/tmp
+  // Read-write: Apple Container doesn't support nested overlapping bind mounts
+  // (a writable child under a readonly parent), so we mount as read-write.
+  // Container is ephemeral (--rm) so no persistent changes to host credentials.
   const hostGeminiDir = path.join(homeDir, '.gemini');
   if (fs.existsSync(hostGeminiDir)) {
     mounts.push({
       hostPath: hostGeminiDir,
       containerPath: '/home/node/.gemini',
-      readonly: true,  // Security: prevent credential tampering
+      readonly: false,
     });
   }
 
