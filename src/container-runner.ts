@@ -370,6 +370,7 @@ async function runContainerAgentInternal(
     '-e', `GEMINI_API_KEY=${process.env.GEMINI_API_KEY || ''}`,
     '-e', `GEMINI_SYSTEM_PROMPT=${sanitizedPrompt}`,
     '-e', `GEMINI_ENABLE_SEARCH=${input.enableWebSearch !== false ? 'true' : 'false'}`,
+    '-e', `GEMINI_MODEL=${process.env.GEMINI_MODEL || 'gemini-3-flash-preview'}`,
     '-e', `CONTAINER_TIMEOUT=${CONTAINER_TIMEOUT}`,
   );
 

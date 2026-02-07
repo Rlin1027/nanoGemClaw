@@ -79,7 +79,8 @@ Summary:`;
         let stdout = '';
         let stderr = '';
 
-        const gemini = spawn('gemini', ['-p', prompt, '--output-format', 'text'], {
+        const model = process.env.GEMINI_MODEL || 'gemini-3-flash-preview';
+        const gemini = spawn('gemini', ['--model', model, '-p', prompt, '--output-format', 'text'], {
             env: {
                 ...process.env,
                 HOME: process.env.HOME,

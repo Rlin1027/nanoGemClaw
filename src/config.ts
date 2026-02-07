@@ -3,6 +3,7 @@ import path from 'path';
 export const ASSISTANT_NAME = process.env.ASSISTANT_NAME || 'Andy';
 export const POLL_INTERVAL = 2000;
 export const SCHEDULER_POLL_INTERVAL = 60000;
+export const GEMINI_MODEL = process.env.GEMINI_MODEL || 'gemini-3-flash-preview';
 
 // Telegram Bot Configuration
 export const TELEGRAM_BOT_TOKEN = process.env.TELEGRAM_BOT_TOKEN || '';
@@ -186,6 +187,7 @@ export const ALLOWED_CONTAINER_ENV_KEYS = [
   'GOOGLE_API_KEY',
   'GEMINI_SYSTEM_PROMPT',
   'GEMINI_ENABLE_SEARCH',
+  'GEMINI_MODEL',
   'CONTAINER_TIMEOUT',
   'TZ',
   'NODE_ENV',

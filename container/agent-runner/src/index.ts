@@ -116,13 +116,14 @@ async function runGeminiAgent(input: ContainerInput): Promise<ContainerOutput> {
   args.push('--output-format', 'stream-json');
   args.push('--yolo');  // Auto-approve all tool calls (like bypassPermissions)
 
+  // Use specified model (default: gemini-3-flash-preview)
+  const model = process.env.GEMINI_MODEL || 'gemini-3-flash-preview';
+  args.push('--model', model);
+
   // Resume session if provided
   if (input.sessionId) {
     args.push('--resume', input.sessionId);
   }
-
-  // Note: Model selection is handled by Gemini CLI settings (Auto mode)
-  // Users can configure preferred model via `gemini /settings`
 
   log(`Running: gemini ${args.slice(0, 4).join(' ')}...`);
 
