@@ -18,6 +18,7 @@ import {
   updateTaskAfterRun,
 } from './db.js';
 import { logger } from './logger.js';
+import { isMaintenanceMode } from './maintenance.js';
 import { RegisteredGroup, ScheduledTask } from './types.js';
 
 export interface SchedulerDependencies {
@@ -153,6 +154,15 @@ export function startSchedulerLoop(deps: SchedulerDependencies): { stop: () => v
     if (stopped) return;
 
     try {
+      // Skip task processing in maintenance mode
+      if (isMaintenanceMode()) {
+        logger.debug('Scheduler skipping: maintenance mode active');
+        if (!stopped) {
+          currentTimeout = setTimeout(loop, SCHEDULER_POLL_INTERVAL);
+        }
+        return;
+      }
+
       const dueTasks = getDueTasks();
       if (dueTasks.length > 0) {
         logger.info({ count: dueTasks.length }, 'Found due tasks');

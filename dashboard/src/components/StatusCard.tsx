@@ -1,4 +1,4 @@
-import { Activity, Terminal, Brain, EyeOff, Bot } from "lucide-react";
+import { Terminal, Brain, EyeOff, Bot } from "lucide-react";
 import { cn } from "@/lib/utils";
 
 export type AgentStatus = 'idle' | 'thinking' | 'syncing' | 'error';
@@ -33,7 +33,9 @@ export function StatusCard({
     status,
     messageCount,
     activeTasks,
-    onHide
+    onHide,
+    onOpenTerminal,
+    onViewMemory,
 }: StatusCardProps) {
     return (
         <div className={cn(
@@ -83,10 +85,16 @@ export function StatusCard({
 
             {/* Actions */}
             <div className="flex gap-2">
-                <button className="flex-1 flex items-center justify-center gap-2 bg-slate-800 hover:bg-slate-700 text-slate-300 text-sm font-medium py-2 rounded-lg transition-colors border border-slate-700">
+                <button
+                    onClick={onOpenTerminal}
+                    className="flex-1 flex items-center justify-center gap-2 bg-slate-800 hover:bg-slate-700 text-slate-300 text-sm font-medium py-2 rounded-lg transition-colors border border-slate-700"
+                >
                     <Terminal size={16} /> Console
                 </button>
-                <button className="flex-1 flex items-center justify-center gap-2 bg-slate-800 hover:bg-slate-700 text-slate-300 text-sm font-medium py-2 rounded-lg transition-colors border border-slate-700">
+                <button
+                    onClick={onViewMemory}
+                    className="flex-1 flex items-center justify-center gap-2 bg-slate-800 hover:bg-slate-700 text-slate-300 text-sm font-medium py-2 rounded-lg transition-colors border border-slate-700"
+                >
                     <Brain size={16} /> Memory
                 </button>
             </div>

@@ -11,7 +11,8 @@
     "setup:telegram": "tsx src/telegram-setup.ts",
     "typecheck": "tsc --noEmit",
     "format": "prettier --write \"src/**/*.ts\"",
-    "format:check": "prettier --check \"src/**/*.ts\""
+    "format:check": "prettier --check \"src/**/*.ts\"",
+    "build:dashboard": "cd dashboard && npm run build"
   },
   "dependencies": {
     "@google-cloud/speech": "^7.2.1",

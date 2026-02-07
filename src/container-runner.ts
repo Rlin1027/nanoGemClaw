@@ -18,6 +18,7 @@ import {
 import { logger } from './logger.js';
 import { validateAdditionalMounts } from './mount-security.js';
 import { RegisteredGroup } from './types.js';
+import { emitDashboardEvent } from './server.js';
 
 // Sentinel markers for robust output parsing (must match agent-runner)
 const OUTPUT_START_MARKER = '---NANOCLAW_OUTPUT_START---';
@@ -290,6 +291,9 @@ export async function runContainerAgent(
   );
 
   return groupLockManager.withLock(group.folder, async () => {
+    // Notify dashboard: agent is thinking
+    emitDashboardEvent('agent:status', { groupFolder: group.folder, status: 'thinking' });
+
     const startTime = Date.now();
     const result = await runContainerAgentInternal(group, input);
     const durationMs = Date.now() - startTime;
@@ -323,6 +327,13 @@ export async function runContainerAgent(
     } catch (err) {
       logger.warn({ err }, 'Failed to log usage stats');
     }
+
+    // Notify dashboard: agent finished
+    emitDashboardEvent('agent:status', {
+      groupFolder: group.folder,
+      status: result.status === 'error' ? 'error' : 'idle',
+      error: result.status === 'error' ? result.error : undefined,
+    });
 
     return result;
   });

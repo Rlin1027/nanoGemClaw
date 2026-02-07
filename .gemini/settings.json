@@ -1,0 +1,12 @@
+{
+  "tools": {
+    "autoAccept": false,
+    "allowed": [
+      "run_shell_command(wc -l *)",
+      "run_shell_command(npx tsc *)"
+    ]
+  },
+  "context": {
+    "fileName": ["GEMINI.md"]
+  }
+}

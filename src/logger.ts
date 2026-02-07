@@ -2,7 +2,17 @@
  * Simple console logger (replaces pino for simplicity)
  */
 
-const LOG_LEVEL = process.env.LOG_LEVEL || 'info';
+import { EventEmitter } from 'node:events';
+
+export interface LogEntry {
+  id: number;
+  timestamp: string;
+  level: string;
+  message: string;
+  data?: unknown;
+}
+
+let currentLogLevel = process.env.LOG_LEVEL || 'info';
 
 const levels: Record<string, number> = {
   debug: 0,
@@ -11,8 +21,14 @@ const levels: Record<string, number> = {
   error: 3,
 };
 
+const MAX_BUFFER_SIZE = 500;
+const logBuffer: LogEntry[] = [];
+let logIdCounter = 0;
+
+export const logEmitter = new EventEmitter();
+
 function shouldLog(level: string): boolean {
-  return levels[level] >= levels[LOG_LEVEL];
+  return levels[level] >= levels[currentLogLevel];
 }
 
 const SENSITIVE_KEYS = /key|token|secret|password|credential|auth/i;
@@ -33,25 +49,75 @@ function formatData(data: unknown): string {
   return String(data);
 }
 
+function addToBuffer(entry: LogEntry): void {
+  logBuffer.push(entry);
+  if (logBuffer.length > MAX_BUFFER_SIZE) {
+    logBuffer.shift();
+  }
+  logEmitter.emit('log', entry);
+}
+
+export function getLogBuffer(): LogEntry[] {
+  return [...logBuffer];
+}
+
+export function setLogLevel(level: string): void {
+  if (levels[level] !== undefined) {
+    currentLogLevel = level;
+  }
+}
+
 export const logger = {
   debug: (data: unknown, msg?: string) => {
     if (shouldLog('debug')) {
-      console.log(`[DEBUG] ${msg || ''} ${formatData(data)}`);
+      const message = `[DEBUG] ${msg || ''} ${formatData(data)}`;
+      console.log(message);
+      addToBuffer({
+        id: ++logIdCounter,
+        timestamp: new Date().toISOString(),
+        level: 'debug',
+        message,
+        data,
+      });
     }
   },
   info: (data: unknown, msg?: string) => {
     if (shouldLog('info')) {
-      console.log(`[INFO] ${msg || ''} ${formatData(data)}`);
+      const message = `[INFO] ${msg || ''} ${formatData(data)}`;
+      console.log(message);
+      addToBuffer({
+        id: ++logIdCounter,
+        timestamp: new Date().toISOString(),
+        level: 'info',
+        message,
+        data,
+      });
     }
   },
   warn: (data: unknown, msg?: string) => {
     if (shouldLog('warn')) {
-      console.warn(`[WARN] ${msg || ''} ${formatData(data)}`);
+      const message = `[WARN] ${msg || ''} ${formatData(data)}`;
+      console.warn(message);
+      addToBuffer({
+        id: ++logIdCounter,
+        timestamp: new Date().toISOString(),
+        level: 'warn',
+        message,
+        data,
+      });
     }
   },
   error: (data: unknown, msg?: string) => {
     if (shouldLog('error')) {
-      console.error(`[ERROR] ${msg || ''} ${formatData(data)}`);
+      const message = `[ERROR] ${msg || ''} ${formatData(data)}`;
+      console.error(message);
+      addToBuffer({
+        id: ++logIdCounter,
+        timestamp: new Date().toISOString(),
+        level: 'error',
+        message,
+        data,
+      });
     }
   },
 };

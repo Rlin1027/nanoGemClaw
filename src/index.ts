@@ -46,6 +46,8 @@ import { NewMessage, RegisteredGroup, Session } from './types.js';
 import { loadJson, saveJson, formatError } from './utils.js';
 
 import { logger } from './logger.js';
+import { isMaintenanceMode, loadMaintenanceState } from './maintenance.js';
+import { setGroupRegistrar } from './server.js';
 
 let bot: TelegramBot;
 let lastTimestamp = '';
@@ -465,6 +467,12 @@ async function processMessage(msg: TelegramBot.Message): Promise<void> {
   const chatId = msg.chat.id.toString();
   const group = registeredGroups[chatId];
   if (!group) return;
+
+  // Maintenance mode: auto-reply and skip processing
+  if (isMaintenanceMode()) {
+    await bot.sendMessage(parseInt(chatId), '⚙️ 系統維護中，請稍後再試。');
+    return;
+  }
 
   // Extract content (text or caption)
   let content = msg.text || msg.caption || '';
@@ -1493,6 +1501,7 @@ async function main(): Promise<void> {
 
   initDatabase();
   await loadState();
+  loadMaintenanceState();
 
   // Start health check server
   const { setHealthCheckDependencies, startHealthCheckServer } = await import('./health-check.js');
@@ -1516,7 +1525,7 @@ async function main(): Promise<void> {
 
   // Start Dashboard Server (Phase 2)
   const { startDashboardServer, setGroupsProvider } = await import('./server.js');
-  const { getTaskById, getTasksForGroup, getAllTasks, getErrorState } = await import('./db.js');
+  const { getTaskById, getTasksForGroup, getAllTasks, getErrorState, getGroupMessageStats } = await import('./db.js');
 
   startDashboardServer();
 
@@ -1536,10 +1545,25 @@ async function main(): Promise<void> {
         id: group.folder,
         name: group.name,
         status,
-        messageCount: 0, // Performance optimization: fetch async or cache
+        messageCount: (() => {
+          const chatJid = Object.entries(registeredGroups).find(([, g]) => g.folder === group.folder)?.[0];
+          return chatJid ? (getGroupMessageStats(chatJid)?.message_count || 0) : 0;
+        })(),
         activeTasks
       };
     });
+  });
+
+  // Inject group registrar
+  setGroupRegistrar((chatId: string, name: string) => {
+    const folder = name.replace(/[^a-zA-Z0-9_-]/g, '_').toLowerCase();
+    registerGroup(chatId, {
+      name,
+      folder,
+      trigger: `@${ASSISTANT_NAME}`,
+      added_at: new Date().toISOString(),
+    });
+    return { chatId, name, folder };
   });
 
   // Connect to Telegram

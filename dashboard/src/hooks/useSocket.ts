@@ -2,7 +2,7 @@ import { useEffect, useState } from 'react';
 import { io, Socket } from 'socket.io-client';
 import { AgentStatus } from '../components/StatusCard';
 
-const SERVER_URL = 'http://localhost:3000';
+const SERVER_URL = import.meta.env.VITE_API_URL || '';
 
 export interface GroupData {
     id: string;
@@ -18,7 +18,7 @@ export function useSocket() {
     const [groups, setGroups] = useState<GroupData[]>([]);
 
     useEffect(() => {
-        const socketInstance = io(SERVER_URL);
+        const socketInstance = io(SERVER_URL || window.location.origin);
 
         socketInstance.on('connect', () => {
             console.log('Connected to Dashboard Server');
@@ -31,8 +31,14 @@ export function useSocket() {
         });
 
         socketInstance.on('groups:update', (data: GroupData[]) => {
-            console.log('Received groups update:', data);
             setGroups(data);
+        });
+
+        // Real-time agent status updates
+        socketInstance.on('agent:status', (data: { groupFolder: string; status: AgentStatus; error?: string }) => {
+            setGroups(prev => prev.map(g =>
+                g.id === data.groupFolder ? { ...g, status: data.status } : g
+            ));
         });
 
         setSocket(socketInstance);
