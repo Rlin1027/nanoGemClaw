@@ -72,12 +72,26 @@
    - Create `.env` based on `.env.example`.
    - Run `npm run setup:telegram` to verify.
 
-3. **Build & Run:**
+3. **Build Dashboard:**
 
    ```bash
-   cd container && ./build.sh && cd ..
+   cd dashboard && npm install && cd ..
+   npm run build:dashboard
+   ```
+
+4. **Build Agent Container:**
+
+   ```bash
+   bash container/build.sh
+   ```
+
+5. **Start:**
+
+   ```bash
    npm run dev
    ```
+
+   Open `http://localhost:3000` to access the Web Dashboard.
 
 ---
 
@@ -178,6 +192,10 @@ npm start                  # Serves dashboard at :3000
 - **STT failing?** Ensure `ffmpeg` is installed on your host system (`brew install ffmpeg`).
 - **Media not processing?** Verify your `GEMINI_API_KEY` is set in `.env`.
 - **Container issues?** Run `./container/build.sh` to ensure the latest image is ready.
+- **Dashboard blank page?** Ensure you ran `cd dashboard && npm install` before building. The dashboard has its own `package.json`.
+- **CORS errors on dashboard?** The dashboard origin must be in the allowed list. Check `DASHBOARD_ORIGINS` env var or update `src/server.ts`.
+- **Container EROFS error?** Apple Container doesn't support nested overlapping bind mounts. Ensure `~/.gemini` is mounted as read-write.
+- **Session resume failed?** Clear stale sessions with `echo "{}" > data/sessions.json` and restart.
 
 ---
 

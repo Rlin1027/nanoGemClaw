@@ -59,7 +59,7 @@
 
 ### 快速开始
 
-1. **克隆与安装：**
+1. **Clone 与安装：**
 
    ```bash
    git clone https://github.com/Rlin1027/NanoGemClaw.git
@@ -67,17 +67,31 @@
    npm install
    ```
 
-2. **配置机器人：**
-   - 从 Telegram 的 **@BotFather** 获取 Token。
-   - 根据 `.env.example` 创建 `.env` 文件。
-   - 运行 `npm run setup:telegram` 进行验证。
+2. **配置 Bot：**
+   - 在 Telegram 向 **@BotFather** 获取 Token。
+   - 根据 `.env.example` 创建 `.env`。
+   - 运行 `npm run setup:telegram` 验证。
 
-3. **构建与运行：**
+3. **构建 Dashboard：**
 
    ```bash
-   cd container && ./build.sh && cd ..
+   cd dashboard && npm install && cd ..
+   npm run build:dashboard
+   ```
+
+4. **构建 Agent 容器：**
+
+   ```bash
+   bash container/build.sh
+   ```
+
+5. **启动：**
+
+   ```bash
    npm run dev
    ```
+
+   打开 `http://localhost:3000` 访问 Web 监控面板。
 
 ---
 
@@ -178,6 +192,10 @@ npm start                  # 在 :3000 提供面板服务
 - **STT 失败？** 确认宿主机已安装 `ffmpeg` (`brew install ffmpeg`)。
 - **无法处理多媒体？** 确认 `.env` 中的 `GEMINI_API_KEY` 已正确设置。
 - **容器问题？** 执行 `./container/build.sh` 确保镜像为最新版本。
+- **Dashboard 空白页面？** 确认已运行 `cd dashboard && npm install`。Dashboard 有独立的 `package.json`。
+- **Dashboard CORS 错误？** Dashboard origin 必须在允许列表中。检查 `DASHBOARD_ORIGINS` 环境变量或更新 `src/server.ts`。
+- **容器 EROFS 错误？** Apple Container 不支持嵌套挂载覆盖。确认 `~/.gemini` 以 read-write 方式挂载。
+- **Session 恢复失败？** 运行 `echo "{}" > data/sessions.json` 清除旧 session 并重启。
 
 ## 常见问题
 

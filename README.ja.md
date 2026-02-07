@@ -59,7 +59,7 @@
 
 ### クイックスタート
 
-1. **クローンとインストール:**
+1. **Clone とインストール：**
 
    ```bash
    git clone https://github.com/Rlin1027/NanoGemClaw.git
@@ -67,17 +67,31 @@
    npm install
    ```
 
-2. **ボットの設定:**
-   - Telegram の **@BotFather** からトークンを取得します。
-   - `.env.example` を参考に `.env` ファイルを作成します。
-   - `npm run setup:telegram` を実行して検証します。
+2. **Bot 設定：**
+   - Telegram の **@BotFather** からトークンを取得。
+   - `.env.example` を基に `.env` を作成。
+   - `npm run setup:telegram` で確認。
 
-3. **ビルドと実行:**
+3. **Dashboard のビルド：**
 
    ```bash
-   cd container && ./build.sh && cd ..
+   cd dashboard && npm install && cd ..
+   npm run build:dashboard
+   ```
+
+4. **Agent コンテナのビルド：**
+
+   ```bash
+   bash container/build.sh
+   ```
+
+5. **起動：**
+
+   ```bash
    npm run dev
    ```
+
+   `http://localhost:3000` にアクセスして Web ダッシュボードを開きます。
 
 ---
 
@@ -178,6 +192,10 @@ npm start                  # :3000 でダッシュボードを提供
 - **STT が失敗する？** ホストシステムに `ffmpeg` がインストールされていることを確認してください (`brew install ffmpeg`)。
 - **メディアを処理できない？** `.env` に `GEMINI_API_KEY` が設定されているか確認してください。
 - **コンテナの問題？** `./container/build.sh` を実行して、最新のイメージが準備されているか確認してください。
+- **Dashboard が空白？** `cd dashboard && npm install` を実行したか確認。Dashboard には独自の `package.json` があります。
+- **Dashboard の CORS エラー？** Dashboard の origin が許可リストに含まれている必要があります。`DASHBOARD_ORIGINS` 環境変数または `src/server.ts` を確認。
+- **コンテナ EROFS エラー？** Apple Container はネストされたバインドマウントの上書きをサポートしていません。`~/.gemini` が read-write でマウントされていることを確認。
+- **セッション復元失敗？** `echo "{}" > data/sessions.json` で古いセッションをクリアして再起動。
 
 ---
 

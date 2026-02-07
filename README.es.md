@@ -67,17 +67,31 @@
    npm install
    ```
 
-2. **Configurar el Bot:**
-   - Obtén un token de **@BotFather** en Telegram.
-   - Crea un archivo `.env` basado en `.env.example`.
-   - Ejecuta `npm run setup:telegram` para verificar.
+2. **Configurar Bot:**
+   - Obtener un token de **@BotFather** en Telegram.
+   - Crear `.env` basado en `.env.example`.
+   - Ejecutar `npm run setup:telegram` para verificar.
 
-3. **Construir y Ejecutar:**
+3. **Compilar Dashboard:**
 
    ```bash
-   cd container && ./build.sh && cd ..
+   cd dashboard && npm install && cd ..
+   npm run build:dashboard
+   ```
+
+4. **Compilar Contenedor de Agente:**
+
+   ```bash
+   bash container/build.sh
+   ```
+
+5. **Iniciar:**
+
+   ```bash
    npm run dev
    ```
+
+   Abrir `http://localhost:3000` para acceder al Panel Web.
 
 ---
 
@@ -178,6 +192,10 @@ npm start                  # Sirve el dashboard en :3000
 - **¿Falla el STT?** Asegúrate de tener `ffmpeg` instalado en tu sistema host (`brew install ffmpeg`).
 - **¿No procesa multimedia?** Verifica que tu `GEMINI_API_KEY` esté configurada en `.env`.
 - **¿Problemas con el contenedor?** Ejecuta `./container/build.sh` para asegurar la última imagen.
+- **¿Dashboard en blanco?** Asegúrate de ejecutar `cd dashboard && npm install`. El dashboard tiene su propio `package.json`.
+- **¿Errores CORS en el dashboard?** El origen del dashboard debe estar en la lista permitida. Revisa la variable `DASHBOARD_ORIGINS` o actualiza `src/server.ts`.
+- **¿Error EROFS en contenedor?** Apple Container no soporta montajes bind anidados superpuestos. Asegúrate de que `~/.gemini` esté montado como lectura-escritura.
+- **¿Fallo al restaurar sesión?** Limpia las sesiones obsoletas con `echo "{}" > data/sessions.json` y reinicia.
 
 ---
 
