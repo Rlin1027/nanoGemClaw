@@ -308,7 +308,7 @@ export function startDashboardServer() {
         try {
             const { getMemorySummary } = await import('./db.js');
             const summary = getMemorySummary(groupFolder);
-            res.json({ data: summary });
+            res.json({ data: summary ?? null });
         } catch {
             res.status(500).json({ error: 'Failed to fetch memory' });
         }
