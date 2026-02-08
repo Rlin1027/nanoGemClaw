@@ -2,7 +2,7 @@ import { useEffect, useState } from 'react';
 import { io, Socket } from 'socket.io-client';
 import { AgentStatus } from '../components/StatusCard';
 
-const SERVER_URL = import.meta.env.VITE_API_URL || '';
+const SERVER_URL = 'http://localhost:3000';
 
 export interface GroupData {
     id: string;
@@ -10,19 +10,16 @@ export interface GroupData {
     status: AgentStatus;
     messageCount: number;
     activeTasks: number;
-    persona?: string;
-    requireTrigger?: boolean;
-    enableWebSearch?: boolean;
-    folder?: string;
 }
 
 export function useSocket() {
     const [socket, setSocket] = useState<Socket | null>(null);
     const [isConnected, setIsConnected] = useState(false);
     const [groups, setGroups] = useState<GroupData[]>([]);
+    const [logs, setLogs] = useState<string[]>([]);
 
     useEffect(() => {
-        const socketInstance = io(SERVER_URL || window.location.origin);
+        const socketInstance = io(SERVER_URL);
 
         socketInstance.on('connect', () => {
             console.log('Connected to Dashboard Server');
@@ -35,14 +32,16 @@ export function useSocket() {
         });
 
         socketInstance.on('groups:update', (data: GroupData[]) => {
+            console.log('Received groups update:', data);
             setGroups(data);
         });
 
-        // Real-time agent status updates
-        socketInstance.on('agent:status', (data: { groupFolder: string; status: AgentStatus; error?: string }) => {
-            setGroups(prev => prev.map(g =>
-                g.id === data.groupFolder ? { ...g, status: data.status } : g
-            ));
+        socketInstance.on('logs:history', (history: string[]) => {
+            setLogs(history);
+        });
+
+        socketInstance.on('logs:entry', (entry: string) => {
+            setLogs(prev => [...prev, entry]);
         });
 
         setSocket(socketInstance);
@@ -52,5 +51,5 @@ export function useSocket() {
         };
     }, []);
 
-    return { socket, isConnected, groups };
+    return { socket, isConnected, groups, logs };
 }

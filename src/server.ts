@@ -74,7 +74,36 @@ export function startDashboardServer() {
   );
   app.use(express.json());
 
-  // Optional API key authentication
+  // Authentication
+  const ACCESS_CODE = process.env.DASHBOARD_ACCESS_CODE;
+
+  app.post('/api/auth/verify', (req, res) => {
+    const { accessCode } = req.body;
+    // Check header first (from LoginScreen), then body
+    const code = req.headers['x-access-code'] || accessCode;
+
+    if (ACCESS_CODE && code !== ACCESS_CODE) {
+      res.status(401).json({ error: 'Invalid access code' });
+      return;
+    }
+    res.json({ success: true });
+  });
+
+  // Global Auth Middleware for protective routes
+  app.use((req, res, next) => {
+    if (!ACCESS_CODE) return next();
+
+    // Allow read-only GET requests without auth (mostly)
+    // But strictly protect all mutation methods: POST, PUT, DELETE
+    if (['POST', 'PUT', 'DELETE'].includes(req.method) && req.path !== '/api/auth/verify') {
+      const code = req.headers['x-access-code'] || req.query.accessCode;
+      if (code !== ACCESS_CODE) {
+        res.status(401).json({ error: 'Authentication required' });
+        return;
+      }
+    }
+    next();
+  });
   if (DASHBOARD_API_KEY) {
     app.use((req, res, next) => {
       const apiKey = req.headers['x-api-key'] || req.query.apiKey;
@@ -623,7 +652,9 @@ export function startDashboardServer() {
           dashboardHost: DASHBOARD_HOST,
           dashboardPort: DASHBOARD_PORT,
           uptime: process.uptime(),
+          uptime: process.uptime(),
           connectedClients: io ? io.engine.clientsCount : 0,
+          authRequired: !!process.env.DASHBOARD_ACCESS_CODE,
         },
       });
     } catch {

@@ -1,73 +1,77 @@
 import { useState, useEffect, useCallback } from 'react';
 
-const BASE_URL = import.meta.env.VITE_API_URL || '';
-const API_KEY = import.meta.env.VITE_API_KEY || '';
+const API_BASE = 'http://localhost:3000';
 
-export async function apiFetch<T>(path: string, options?: RequestInit): Promise<T> {
-    const headers: Record<string, string> = {
-        'Content-Type': 'application/json',
-        ...(API_KEY ? { 'x-api-key': API_KEY } : {}),
-        ...(options?.headers as Record<string, string> || {}),
-    };
-
-    const res = await fetch(`${BASE_URL}${path}`, {
-        ...options,
-        headers,
-    });
-
-    if (!res.ok) {
-        const body = await res.json().catch(() => ({ error: res.statusText }));
-        throw new Error(body.error || `HTTP ${res.status}`);
-    }
-
-    return res.json();
+interface UseApiQueryResult<T> {
+    data: T | null;
+    isLoading: boolean;
+    error: Error | null;
+    refetch: () => Promise<void>;
 }
 
-export function useApiQuery<T>(path: string) {
+export function useApiQuery<T>(endpoint: string): UseApiQueryResult<T> {
     const [data, setData] = useState<T | null>(null);
-    const [loading, setLoading] = useState(true);
-    const [error, setError] = useState<string | null>(null);
+    const [isLoading, setIsLoading] = useState(true);
+    const [error, setError] = useState<Error | null>(null);
 
-    const refetch = useCallback(async () => {
-        setLoading(true);
-        setError(null);
+    const fetchData = useCallback(async () => {
+        setIsLoading(true);
         try {
-            const result = await apiFetch<{ data: T }>(path);
-            setData(result.data);
+            const res = await fetch(`${API_BASE}${endpoint}`);
+            if (!res.ok) throw new Error(`API Error: ${res.statusText}`);
+            const json = await res.json();
+            setData(json.data ?? json); // Support { data: ... } or raw json
+            setError(null);
         } catch (err) {
-            setError(err instanceof Error ? err.message : 'Unknown error');
+            setError(err instanceof Error ? err : new Error('Unknown error'));
         } finally {
-            setLoading(false);
+            setIsLoading(false);
         }
-    }, [path]);
+    }, [endpoint]);
 
     useEffect(() => {
-        refetch();
-    }, [refetch]);
+        fetchData();
+    }, [fetchData]);
 
-    return { data, loading, error, refetch };
+    return { data, isLoading, error, refetch: fetchData };
 }
 
-export function useApiMutation<T>(path: string, method: string = 'POST') {
-    const [loading, setLoading] = useState(false);
-    const [error, setError] = useState<string | null>(null);
+interface UseApiMutationResult<T, V> {
+    mutate: (variables: V) => Promise<T | null>;
+    isLoading: boolean;
+    error: Error | null;
+}
 
-    const mutate = useCallback(async (body?: unknown): Promise<T | null> => {
-        setLoading(true);
+export function useApiMutation<T, V>(
+    endpoint: string,
+    method: 'POST' | 'PUT' | 'DELETE' = 'POST'
+): UseApiMutationResult<T, V> {
+    const [isLoading, setIsLoading] = useState(false);
+    const [error, setError] = useState<Error | null>(null);
+
+    const mutate = async (variables: V) => {
+        setIsLoading(true);
         setError(null);
         try {
-            const result = await apiFetch<{ data: T }>(path, {
+            const accessCode = localStorage.getItem('nanogemclaw_access_code') || '';
+            const res = await fetch(`${API_BASE}${endpoint}`, {
                 method,
-                body: body ? JSON.stringify(body) : undefined,
+                headers: {
+                    'Content-Type': 'application/json',
+                    'x-access-code': accessCode
+                },
+                body: JSON.stringify(variables),
             });
-            return result.data;
+            if (!res.ok) throw new Error(`API Error: ${res.statusText}`);
+            const json = await res.json();
+            return (json.data ?? json) as T;
         } catch (err) {
-            setError(err instanceof Error ? err.message : 'Unknown error');
+            setError(err instanceof Error ? err : new Error('Unknown error'));
             return null;
         } finally {
-            setLoading(false);
+            setIsLoading(false);
         }
-    }, [path, method]);
+    };
 
-    return { mutate, loading, error };
+    return { mutate, isLoading, error };
 }
