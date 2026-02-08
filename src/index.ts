@@ -1603,25 +1603,27 @@ async function main(): Promise<void> {
 
   // Inject data provider
   setGroupsProvider(() => {
-    return Object.values(registeredGroups).map(group => {
+    return Object.entries(registeredGroups).map(([chatId, group]) => {
       const tasks = getTasksForGroup(group.folder);
       const activeTasks = tasks.filter(t => t.status === 'active').length;
       const errorState = getErrorState(group.folder);
 
-      // Determine status
       let status = 'idle';
       if (errorState && errorState.consecutiveFailures > 0) status = 'error';
-      // TODO: Track 'thinking' state via container events
 
       return {
         id: group.folder,
         name: group.name,
         status,
         messageCount: (() => {
-          const chatJid = Object.entries(registeredGroups).find(([, g]) => g.folder === group.folder)?.[0];
-          return chatJid ? (getGroupMessageStats(chatJid)?.message_count || 0) : 0;
+          return chatId ? (getGroupMessageStats(chatId)?.message_count || 0) : 0;
         })(),
-        activeTasks
+        activeTasks,
+        // Extended fields
+        persona: group.persona,
+        requireTrigger: group.requireTrigger,
+        enableWebSearch: group.enableWebSearch,
+        folder: group.folder,
       };
     });
   });
@@ -1636,6 +1638,28 @@ async function main(): Promise<void> {
       added_at: new Date().toISOString(),
     });
     return { chatId, name, folder };
+  });
+
+  // Inject group updater for dashboard settings API
+  const { setGroupUpdater } = await import('./server.js');
+  setGroupUpdater((folder: string, updates: Record<string, any>) => {
+    // Find chatId by folder
+    const entry = Object.entries(registeredGroups).find(([, g]) => g.folder === folder);
+    if (!entry) return null;
+
+    const [chatId, group] = entry;
+
+    // Apply updates
+    if (updates.persona !== undefined) group.persona = updates.persona;
+    if (updates.enableWebSearch !== undefined) group.enableWebSearch = updates.enableWebSearch;
+    if (updates.requireTrigger !== undefined) group.requireTrigger = updates.requireTrigger;
+    if (updates.name !== undefined) group.name = updates.name;
+
+    // Save
+    registeredGroups[chatId] = group;
+    saveJson(path.join(DATA_DIR, 'registered_groups.json'), registeredGroups);
+
+    return group;
   });
 
   // Connect to Telegram

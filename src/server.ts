@@ -19,6 +19,7 @@ let io: Server;
 let httpServer: ReturnType<typeof createServer> | null = null;
 let groupsProvider: () => any[] = () => [];
 let groupRegistrar: ((chatId: string, name: string) => any) | null = null;
+let groupUpdater: ((folder: string, updates: Record<string, any>) => any) | null = null;
 
 // Path traversal protection
 const SAFE_FOLDER_RE = /^[a-zA-Z0-9_-]+$/;
@@ -166,6 +167,93 @@ export function startDashboardServer() {
         }
     });
 
+    // Get group detail by folder
+    app.get('/api/groups/:folder/detail', async (req, res) => {
+        const { folder } = req.params;
+        if (!validateFolder(folder)) {
+            res.status(400).json({ error: 'Invalid folder' });
+            return;
+        }
+        try {
+            const { getTasksForGroup, getUsageStats, getErrorState } = await import('./db.js');
+            const groups = groupsProvider();
+            const group = groups.find((g: any) => g.id === folder || g.folder === folder);
+            if (!group) {
+                res.status(404).json({ error: 'Group not found' });
+                return;
+            }
+            const tasks = getTasksForGroup(folder);
+            const usage = getUsageStats(folder);
+            const errorState = getErrorState(folder);
+
+            res.json({
+                data: {
+                    ...group,
+                    tasks,
+                    usage,
+                    errorState,
+                }
+            });
+        } catch (err) {
+            res.status(500).json({ error: 'Failed to fetch group detail' });
+        }
+    });
+
+    // Update group settings
+    app.put('/api/groups/:folder', async (req, res) => {
+        const { folder } = req.params;
+        if (!validateFolder(folder)) {
+            res.status(400).json({ error: 'Invalid folder' });
+            return;
+        }
+
+        if (!groupUpdater) {
+            res.status(503).json({ error: 'Group updater not available' });
+            return;
+        }
+
+        const { persona, enableWebSearch, requireTrigger, name } = req.body;
+
+        // Validate persona if provided
+        if (persona !== undefined) {
+            const { PERSONAS } = await import('./personas.js');
+            if (!PERSONAS[persona]) {
+                res.status(400).json({ error: `Invalid persona: ${persona}` });
+                return;
+            }
+        }
+
+        const updates: Record<string, any> = {};
+        if (persona !== undefined) updates.persona = persona;
+        if (enableWebSearch !== undefined) updates.enableWebSearch = enableWebSearch;
+        if (requireTrigger !== undefined) updates.requireTrigger = requireTrigger;
+        if (name !== undefined) updates.name = name;
+
+        try {
+            const result = groupUpdater(folder, updates);
+            if (!result) {
+                res.status(404).json({ error: 'Group not found' });
+                return;
+            }
+
+            // Broadcast update to all dashboard clients
+            io.emit('groups:update', groupsProvider());
+            res.json({ data: result });
+        } catch (err) {
+            res.status(500).json({ error: 'Failed to update group' });
+        }
+    });
+
+    // Get available personas
+    app.get('/api/personas', async (_req, res) => {
+        try {
+            const { PERSONAS } = await import('./personas.js');
+            res.json({ data: PERSONAS });
+        } catch {
+            res.status(500).json({ error: 'Failed to fetch personas' });
+        }
+    });
+
     // ================================================================
     // REST API: Tasks
     // ================================================================
@@ -178,7 +266,7 @@ export function startDashboardServer() {
         }
     });
 
-    app.get('/api/tasks/:groupFolder', async (req, res) => {
+    app.get('/api/tasks/group/:groupFolder', async (req, res) => {
         const { groupFolder } = req.params;
         if (!validateFolder(groupFolder)) {
             res.status(400).json({ error: 'Invalid group folder' });
@@ -189,6 +277,179 @@ export function startDashboardServer() {
             res.json({ data: getTasksForGroup(groupFolder) });
         } catch (err) {
             res.status(500).json({ error: 'Failed to fetch tasks' });
+        }
+    });
+
+    // Create a new task
+    app.post('/api/tasks', async (req, res) => {
+        try {
+            const { createTask } = await import('./db.js');
+            const { CronExpressionParser } = await import('cron-parser');
+
+            const { group_folder, prompt, schedule_type, schedule_value, context_mode } = req.body;
+
+            if (!group_folder || !prompt || !schedule_type || !schedule_value) {
+                res.status(400).json({ error: 'Missing required fields: group_folder, prompt, schedule_type, schedule_value' });
+                return;
+            }
+
+            if (!validateFolder(group_folder)) {
+                res.status(400).json({ error: 'Invalid group folder' });
+                return;
+            }
+
+            // Calculate next_run
+            let next_run: string | null = null;
+            if (schedule_type === 'cron') {
+                try {
+                    const interval = CronExpressionParser.parse(schedule_value);
+                    next_run = interval.next().toISOString();
+                } catch {
+                    res.status(400).json({ error: 'Invalid cron expression' });
+                    return;
+                }
+            } else if (schedule_type === 'interval') {
+                const ms = parseInt(schedule_value, 10);
+                if (isNaN(ms) || ms <= 0) {
+                    res.status(400).json({ error: 'Invalid interval value' });
+                    return;
+                }
+                next_run = new Date(Date.now() + ms).toISOString();
+            } else if (schedule_type === 'once') {
+                const scheduled = new Date(schedule_value);
+                if (isNaN(scheduled.getTime())) {
+                    res.status(400).json({ error: 'Invalid date' });
+                    return;
+                }
+                next_run = scheduled.toISOString();
+            } else {
+                res.status(400).json({ error: 'Invalid schedule_type. Must be: cron, interval, or once' });
+                return;
+            }
+
+            const taskId = `task-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
+
+            createTask({
+                id: taskId,
+                group_folder,
+                chat_jid: '', // Will be resolved by scheduler
+                prompt,
+                schedule_type,
+                schedule_value,
+                context_mode: context_mode || 'isolated',
+                next_run,
+                status: 'active',
+                created_at: new Date().toISOString(),
+            });
+
+            res.json({ data: { id: taskId } });
+        } catch (err) {
+            res.status(500).json({ error: 'Failed to create task' });
+        }
+    });
+
+    // Update a task
+    app.put('/api/tasks/:taskId', async (req, res) => {
+        try {
+            const { updateTask, getTaskById } = await import('./db.js');
+            const { taskId } = req.params;
+
+            const task = getTaskById(taskId);
+            if (!task) {
+                res.status(404).json({ error: 'Task not found' });
+                return;
+            }
+
+            const { prompt, schedule_type, schedule_value, status } = req.body;
+            const updates: Record<string, any> = {};
+            if (prompt !== undefined) updates.prompt = prompt;
+            if (schedule_type !== undefined) updates.schedule_type = schedule_type;
+            if (schedule_value !== undefined) updates.schedule_value = schedule_value;
+            if (status !== undefined) updates.status = status;
+
+            // Recalculate next_run if schedule changed
+            if (schedule_type || schedule_value) {
+                const type = schedule_type || task.schedule_type;
+                const value = schedule_value || task.schedule_value;
+
+                if (type === 'cron') {
+                    const { CronExpressionParser } = await import('cron-parser');
+                    try {
+                        const interval = CronExpressionParser.parse(value);
+                        updates.next_run = interval.next().toISOString();
+                    } catch {
+                        res.status(400).json({ error: 'Invalid cron expression' });
+                        return;
+                    }
+                } else if (type === 'interval') {
+                    const ms = parseInt(value, 10);
+                    if (!isNaN(ms) && ms > 0) {
+                        updates.next_run = new Date(Date.now() + ms).toISOString();
+                    }
+                }
+            }
+
+            updateTask(taskId, updates);
+            res.json({ data: { success: true } });
+        } catch (err) {
+            res.status(500).json({ error: 'Failed to update task' });
+        }
+    });
+
+    // Delete a task
+    app.delete('/api/tasks/:taskId', async (req, res) => {
+        try {
+            const { deleteTask, getTaskById } = await import('./db.js');
+            const { taskId } = req.params;
+
+            const task = getTaskById(taskId);
+            if (!task) {
+                res.status(404).json({ error: 'Task not found' });
+                return;
+            }
+
+            deleteTask(taskId);
+            res.json({ data: { success: true } });
+        } catch (err) {
+            res.status(500).json({ error: 'Failed to delete task' });
+        }
+    });
+
+    // Update task status (pause/resume)
+    app.put('/api/tasks/:taskId/status', async (req, res) => {
+        try {
+            const { updateTask, getTaskById } = await import('./db.js');
+            const { taskId } = req.params;
+            const { status } = req.body;
+
+            if (!['active', 'paused'].includes(status)) {
+                res.status(400).json({ error: 'Status must be: active or paused' });
+                return;
+            }
+
+            const task = getTaskById(taskId);
+            if (!task) {
+                res.status(404).json({ error: 'Task not found' });
+                return;
+            }
+
+            updateTask(taskId, { status });
+            res.json({ data: { success: true } });
+        } catch (err) {
+            res.status(500).json({ error: 'Failed to update task status' });
+        }
+    });
+
+    // Get task run logs
+    app.get('/api/tasks/:taskId/runs', async (req, res) => {
+        try {
+            const { getTaskRunLogs } = await import('./db.js');
+            const { taskId } = req.params;
+            const limit = parseInt(req.query.limit as string) || 10;
+
+            res.json({ data: getTaskRunLogs(taskId, limit) });
+        } catch (err) {
+            res.status(500).json({ error: 'Failed to fetch task runs' });
         }
     });
 
@@ -432,6 +693,37 @@ export function startDashboardServer() {
         }
     });
 
+    // Usage timeseries
+    app.get('/api/usage/timeseries', async (req, res) => {
+        try {
+            const { getUsageTimeseries } = await import('./db.js');
+            const period = (req.query.period as string) || '7d';
+            const granularity = (req.query.granularity as string) || 'day';
+            const groupFolder = req.query.groupFolder as string | undefined;
+
+            if (groupFolder && !validateFolder(groupFolder)) {
+                res.status(400).json({ error: 'Invalid group folder' });
+                return;
+            }
+
+            res.json({ data: getUsageTimeseries(period, granularity, groupFolder) });
+        } catch (err) {
+            res.status(500).json({ error: 'Failed to fetch usage timeseries' });
+        }
+    });
+
+    // Usage by group
+    app.get('/api/usage/groups', async (req, res) => {
+        try {
+            const { getUsageByGroup } = await import('./db.js');
+            const since = req.query.since as string | undefined;
+
+            res.json({ data: getUsageByGroup(since) });
+        } catch (err) {
+            res.status(500).json({ error: 'Failed to fetch usage by group' });
+        }
+    });
+
     // ================================================================
     // Static file serving (production dashboard)
     // ================================================================
@@ -495,6 +787,13 @@ export function setGroupsProvider(provider: () => any[]) {
  */
 export function setGroupRegistrar(fn: (chatId: string, name: string) => any) {
     groupRegistrar = fn;
+}
+
+/**
+ * Inject the group update function
+ */
+export function setGroupUpdater(fn: (folder: string, updates: Record<string, any>) => any) {
+    groupUpdater = fn;
 }
 
 /**

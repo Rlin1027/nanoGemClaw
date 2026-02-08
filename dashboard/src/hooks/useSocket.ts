@@ -10,6 +10,10 @@ export interface GroupData {
     status: AgentStatus;
     messageCount: number;
     activeTasks: number;
+    persona?: string;
+    requireTrigger?: boolean;
+    enableWebSearch?: boolean;
+    folder?: string;
 }
 
 export function useSocket() {

@@ -106,6 +106,7 @@ export function OverviewPage({ groups, isConnected }: OverviewPageProps) {
                         <StatusCard
                             key={group.id}
                             {...group}
+                            onClick={() => navigate(`/groups/${group.id}`)}
                             onHide={() => hideGroup(group.id)}
                             onOpenTerminal={() => navigate(`/logs?group=${group.id}`)}
                             onViewMemory={() => navigate(`/memory?group=${group.id}`)}
@@ -137,6 +138,7 @@ export function OverviewPage({ groups, isConnected }: OverviewPageProps) {
                             <div key={group.id} className="relative">
                                 <StatusCard
                                     {...group}
+                                    onClick={() => navigate(`/groups/${group.id}`)}
                                     onOpenTerminal={() => navigate(`/logs?group=${group.id}`)}
                                     onViewMemory={() => navigate(`/memory?group=${group.id}`)}
                                 />
