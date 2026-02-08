@@ -164,7 +164,10 @@ function startMediaCleanupScheduler(): void {
   cleanupOldMedia();
   // Then run periodically
   setInterval(cleanupOldMedia, CLEANUP.MEDIA_CLEANUP_INTERVAL_MS);
-  logger.info({ intervalHours: CLEANUP.MEDIA_CLEANUP_INTERVAL_HOURS }, 'Media cleanup scheduler started');
+  logger.info(
+    { intervalHours: CLEANUP.MEDIA_CLEANUP_INTERVAL_HOURS },
+    'Media cleanup scheduler started',
+  );
 }
 
 // ============================================================================
@@ -236,7 +239,9 @@ async function downloadMedia(
     fs.mkdirSync(mediaDir, { recursive: true });
 
     const ext = path.extname(fileInfo.file_path) || '.bin';
-    const sanitizedName = path.basename(fileName || '').replace(/[^a-zA-Z0-9._-]/g, '_');
+    const sanitizedName = path
+      .basename(fileName || '')
+      .replace(/[^a-zA-Z0-9._-]/g, '_');
     const finalName = sanitizedName || `${Date.now()}${ext}`;
     const localPath = path.join(mediaDir, finalName);
     // Security: verify path is within mediaDir
@@ -249,22 +254,28 @@ async function downloadMedia(
 
     await new Promise<void>((resolve, reject) => {
       const file = fs.createWriteStream(localPath);
-      https.get(fileUrl, (response) => {
-        // Check for successful HTTP response
-        if (response.statusCode !== 200) {
-          fs.unlink(localPath, () => { });
-          reject(new Error(`HTTP ${response.statusCode}: Failed to download media`));
-          return;
-        }
-        response.pipe(file);
-        file.on('finish', () => {
-          file.close();
-          resolve();
+      https
+        .get(fileUrl, (response) => {
+          // Check for successful HTTP response
+          if (response.statusCode !== 200) {
+            fs.unlink(localPath, () => {});
+            reject(
+              new Error(
+                `HTTP ${response.statusCode}: Failed to download media`,
+              ),
+            );
+            return;
+          }
+          response.pipe(file);
+          file.on('finish', () => {
+            file.close();
+            resolve();
+          });
+        })
+        .on('error', (err) => {
+          fs.unlink(localPath, () => {});
+          reject(err);
         });
-      }).on('error', (err) => {
-        fs.unlink(localPath, () => { });
-        reject(err);
-      });
     });
 
     logger.debug({ localPath }, 'Media downloaded');
@@ -295,8 +306,10 @@ async function handleAdminCommand(
   command: string,
   args: string[],
 ): Promise<string> {
-  const { getAllTasks, getUsageStats, getAllErrorStates } = await import('./db.js');
-  const { t, setLanguage, availableLanguages, getLanguage } = await import('./i18n.js');
+  const { getAllTasks, getUsageStats, getAllErrorStates } =
+    await import('./db.js');
+  const { t, setLanguage, availableLanguages, getLanguage } =
+    await import('./i18n.js');
   type Language = import('./i18n.js').Language;
   const { PERSONAS } = await import('./personas.js');
 
@@ -375,9 +388,8 @@ async function handleAdminCommand(
 
       // Get usage stats
       const usage = getUsageStats();
-      const avgDuration = usage.total_requests > 0
-        ? Math.round(usage.avg_duration_ms / 1000)
-        : 0;
+      const avgDuration =
+        usage.total_requests > 0 ? Math.round(usage.avg_duration_ms / 1000) : 0;
 
       return `${t().statsTitle}
 
@@ -397,14 +409,17 @@ ${t().usageAnalytics}
         return '📁 No groups registered.';
       }
 
-      const groupList = groups.map((g, i) => {
-        const isMain = g.folder === MAIN_GROUP_FOLDER;
-        const searchStatus = g.enableWebSearch !== false ? '🔍' : '';
-        const hasPrompt = g.systemPrompt ? '💬' : '';
-        const triggerStatus = isMain || g.requireTrigger === false ? '📢' : '';
-        return `${i + 1}. **${g.name}** ${isMain ? '(main)' : ''} ${searchStatus}${hasPrompt}${triggerStatus}
+      const groupList = groups
+        .map((g, i) => {
+          const isMain = g.folder === MAIN_GROUP_FOLDER;
+          const searchStatus = g.enableWebSearch !== false ? '🔍' : '';
+          const hasPrompt = g.systemPrompt ? '💬' : '';
+          const triggerStatus =
+            isMain || g.requireTrigger === false ? '📢' : '';
+          return `${i + 1}. **${g.name}** ${isMain ? '(main)' : ''} ${searchStatus}${hasPrompt}${triggerStatus}
    📁 ${g.folder} | 🎯 ${g.trigger}`;
-      }).join('\n');
+        })
+        .join('\n');
 
       return `📁 **${t().registeredGroups}** (${groups.length})
 
@@ -419,15 +434,22 @@ Legend: 🔍=Search 💬=Custom Prompt 📢=All Messages`;
         return '📅 No scheduled tasks.';
       }
 
-      const taskList = tasks.slice(0, 10).map((t, i) => {
-        const status = t.status === 'active' ? '✅' : t.status === 'paused' ? '⏸️' : '✓';
-        const nextRun = t.next_run ? new Date(t.next_run).toLocaleString() : 'N/A';
-        return `${i + 1}. ${status} **${t.group_folder}**
+      const taskList = tasks
+        .slice(0, 10)
+        .map((t, i) => {
+          const status =
+            t.status === 'active' ? '✅' : t.status === 'paused' ? '⏸️' : '✓';
+          const nextRun = t.next_run
+            ? new Date(t.next_run).toLocaleString()
+            : 'N/A';
+          return `${i + 1}. ${status} **${t.group_folder}**
    📋 ${t.prompt.slice(0, 50)}${t.prompt.length > 50 ? '...' : ''}
    ⏰ ${t.schedule_type}: ${t.schedule_value} | Next: ${nextRun}`;
-      }).join('\n');
+        })
+        .join('\n');
 
-      const moreText = tasks.length > 10 ? `\n\n_...and ${tasks.length - 10} more tasks_` : '';
+      const moreText =
+        tasks.length > 10 ? `\n\n_...and ${tasks.length - 10} more tasks_` : '';
 
       return `📅 **Scheduled Tasks** (${tasks.length})
 
@@ -442,11 +464,14 @@ ${taskList}${moreText}`;
       }
 
       const errorList = errorStates
-        .filter(e => e.state.consecutiveFailures > 0)
-        .map(e => {
-          const group = registeredGroups[Object.keys(registeredGroups).find(
-            k => registeredGroups[k].folder === e.group
-          ) || ''];
+        .filter((e) => e.state.consecutiveFailures > 0)
+        .map((e) => {
+          const group =
+            registeredGroups[
+              Object.keys(registeredGroups).find(
+                (k) => registeredGroups[k].folder === e.group,
+              ) || ''
+            ];
           return `• **${group?.name || e.group}**: ${e.state.consecutiveFailures} failures\n  Last: ${e.state.lastError?.slice(0, 80)}...`;
         })
         .join('\n');
@@ -520,13 +545,16 @@ async function processMessage(msg: TelegramBot.Message): Promise<void> {
       await sendMessage(chatId, response);
     } catch (err) {
       logger.error({ err: formatError(err) }, 'Admin command failed');
-      await sendMessage(chatId, '❌ Admin command failed. Check logs for details.');
+      await sendMessage(
+        chatId,
+        '❌ Admin command failed. Check logs for details.',
+      );
     }
     return;
   }
 
   // Check if trigger prefix is required (main group always responds; others check requireTrigger setting)
-  const needsTrigger = !isMainGroup && (group.requireTrigger !== false);
+  const needsTrigger = !isMainGroup && group.requireTrigger !== false;
   if (needsTrigger && !TRIGGER_PATTERN.test(content)) return;
 
   // Rate limiting check
@@ -537,12 +565,22 @@ async function processMessage(msg: TelegramBot.Message): Promise<void> {
   if (RATE_LIMIT.ENABLED) {
     const rateLimitKey = `group:${chatId}`;
     const windowMs = RATE_LIMIT.WINDOW_MINUTES * 60 * 1000;
-    const result = checkRateLimit(rateLimitKey, RATE_LIMIT.MAX_REQUESTS, windowMs);
+    const result = checkRateLimit(
+      rateLimitKey,
+      RATE_LIMIT.MAX_REQUESTS,
+      windowMs,
+    );
 
     if (!result.allowed) {
       const waitMinutes = Math.ceil(result.resetInMs / 60000);
-      logger.warn({ chatId, remaining: result.remaining, waitMinutes }, 'Rate limited');
-      await sendMessage(chatId, `${t().rateLimited} ${t().retryIn(waitMinutes)}`);
+      logger.warn(
+        { chatId, remaining: result.remaining, waitMinutes },
+        'Rate limited',
+      );
+      await sendMessage(
+        chatId,
+        `${t().rateLimited} ${t().retryIn(waitMinutes)}`,
+      );
       return;
     }
   }
@@ -555,7 +593,10 @@ async function processMessage(msg: TelegramBot.Message): Promise<void> {
     const replyContent = replyMsg.text || replyMsg.caption || '[非文字內容]';
     replyContext = `[回覆 ${replySender} 的訊息: "${replyContent.slice(0, 200)}${replyContent.length > 200 ? '...' : ''}"]\n`;
     content = replyContext + content;
-    logger.info({ chatId, replyToId: replyMsg.message_id }, 'Processing reply context');
+    logger.info(
+      { chatId, replyToId: replyMsg.message_id },
+      'Processing reply context',
+    );
   }
 
   // Handle media with progress updates
@@ -574,7 +615,11 @@ async function processMessage(msg: TelegramBot.Message): Promise<void> {
       message_id: statusMsg.message_id,
     });
 
-    mediaPath = await downloadMedia(mediaInfo.fileId, group.folder, mediaInfo.fileName);
+    mediaPath = await downloadMedia(
+      mediaInfo.fileId,
+      group.folder,
+      mediaInfo.fileName,
+    );
 
     if (mediaPath) {
       const containerMediaPath = `/workspace/group/media/${path.basename(mediaPath)}`;
@@ -588,7 +633,10 @@ async function processMessage(msg: TelegramBot.Message): Promise<void> {
         const { transcribeAudio } = await import('./stt.js');
         const transcription = await transcribeAudio(mediaPath);
         content = `[Voice message transcription: "${transcription}"]\n[Audio file: ${containerMediaPath}]\n${content}`;
-        logger.info({ chatId, transcription: transcription.slice(0, 100) }, 'Voice message transcribed');
+        logger.info(
+          { chatId, transcription: transcription.slice(0, 100) },
+          'Voice message transcribed',
+        );
       } else {
         content = `[Media: ${mediaInfo.type} at ${containerMediaPath}]\n${content}`;
       }
@@ -641,27 +689,40 @@ async function processMessage(msg: TelegramBot.Message): Promise<void> {
 
     // Clean up status message
     if (statusMsg) {
-      await bot.deleteMessage(parseInt(chatId), statusMsg.message_id).catch(() => { });
+      await bot
+        .deleteMessage(parseInt(chatId), statusMsg.message_id)
+        .catch(() => {});
     }
 
     // Send final response with retry button
     const buttons: QuickReplyButton[][] = [
       [
         { text: `🔄 ${t().retry}`, callbackData: `retry:${msg.message_id}` },
-        { text: `💬 ${t().feedback}`, callbackData: `feedback_menu:${msg.message_id}` }
-      ]
+        {
+          text: `💬 ${t().feedback}`,
+          callbackData: `feedback_menu:${msg.message_id}`,
+        },
+      ],
     ];
 
-    await sendMessageWithButtons(chatId, `${ASSISTANT_NAME}: ${response}`, buttons);
+    await sendMessageWithButtons(
+      chatId,
+      `${ASSISTANT_NAME}: ${response}`,
+      buttons,
+    );
   } else if (ipcAlreadySent && statusMsg) {
     // IPC handled the response; just clean up status message
-    await bot.deleteMessage(parseInt(chatId), statusMsg.message_id).catch(() => { });
+    await bot
+      .deleteMessage(parseInt(chatId), statusMsg.message_id)
+      .catch(() => {});
   } else if (statusMsg) {
     // If no response, update status message to error
-    await bot.editMessageText(`❌ ${t().errorOccurred}`, {
-      chat_id: parseInt(chatId),
-      message_id: statusMsg.message_id,
-    }).catch(() => { });
+    await bot
+      .editMessageText(`❌ ${t().errorOccurred}`, {
+        chat_id: parseInt(chatId),
+        message_id: statusMsg.message_id,
+      })
+      .catch(() => {});
   }
 }
 
@@ -713,7 +774,9 @@ async function runAgent(
       systemPrompt: group.systemPrompt,
       persona: group.persona,
       enableWebSearch: group.enableWebSearch ?? true, // Default: enabled
-      mediaPath: mediaPath ? `/workspace/group/media/${path.basename(mediaPath)}` : undefined,
+      mediaPath: mediaPath
+        ? `/workspace/group/media/${path.basename(mediaPath)}`
+        : undefined,
       memoryContext: memoryContext ?? undefined,
     });
 
@@ -725,7 +788,10 @@ async function runAgent(
     if (output.status === 'error') {
       // Auto-retry without session if resume failed
       if (sessionId && output.error?.includes('No previous sessions found')) {
-        logger.warn({ group: group.name }, 'Session resume failed, retrying without session');
+        logger.warn(
+          { group: group.name },
+          'Session resume failed, retrying without session',
+        );
         delete sessions[group.folder];
         saveJson(path.join(DATA_DIR, 'sessions.json'), sessions);
 
@@ -738,7 +804,9 @@ async function runAgent(
           systemPrompt: group.systemPrompt,
           persona: group.persona,
           enableWebSearch: group.enableWebSearch ?? true,
-          mediaPath: mediaPath ? `/workspace/group/media/${path.basename(mediaPath)}` : undefined,
+          mediaPath: mediaPath
+            ? `/workspace/group/media/${path.basename(mediaPath)}`
+            : undefined,
           memoryContext: memoryContext ?? undefined,
         });
 
@@ -748,7 +816,10 @@ async function runAgent(
         }
 
         if (retryOutput.status === 'error') {
-          logger.error({ group: group.name, error: retryOutput.error }, 'Container agent error (retry)');
+          logger.error(
+            { group: group.name, error: retryOutput.error },
+            'Container agent error (retry)',
+          );
           return null;
         }
         return retryOutput.result;
@@ -814,16 +885,22 @@ async function setTyping(chatId: string, isTyping: boolean): Promise<void> {
 
 async function sendMessage(chatId: string, text: string): Promise<void> {
   try {
-    const chunks = splitMessageIntelligently(text, TELEGRAM.MAX_MESSAGE_LENGTH - 96);
+    const chunks = splitMessageIntelligently(
+      text,
+      TELEGRAM.MAX_MESSAGE_LENGTH - 96,
+    );
 
     for (let i = 0; i < chunks.length; i++) {
       await bot.sendMessage(parseInt(chatId), chunks[i]);
       // Rate limiting: add delay between chunks to avoid Telegram limits
       if (i < chunks.length - 1) {
-        await new Promise(r => setTimeout(r, TELEGRAM.RATE_LIMIT_DELAY_MS));
+        await new Promise((r) => setTimeout(r, TELEGRAM.RATE_LIMIT_DELAY_MS));
       }
     }
-    logger.info({ chatId, length: text.length, chunks: chunks.length }, 'Message sent');
+    logger.info(
+      { chatId, length: text.length, chunks: chunks.length },
+      'Message sent',
+    );
   } catch (err) {
     logger.error({ chatId, err: formatError(err) }, 'Failed to send message');
   }
@@ -858,9 +935,15 @@ async function sendMessageWithButtons(
         inline_keyboard: inlineKeyboard,
       },
     });
-    logger.info({ chatId, buttonRows: buttons.length }, 'Message with buttons sent');
+    logger.info(
+      { chatId, buttonRows: buttons.length },
+      'Message with buttons sent',
+    );
   } catch (err) {
-    logger.error({ chatId, err: formatError(err) }, 'Failed to send message with buttons');
+    logger.error(
+      { chatId, err: formatError(err) },
+      'Failed to send message with buttons',
+    );
   }
 }
 
@@ -998,7 +1081,10 @@ function startIpcWatcher(): void {
         }
       });
     } catch (err) {
-      logger.error({ err: formatError(err) }, 'Error reading IPC base directory');
+      logger.error(
+        { err: formatError(err) },
+        'Error reading IPC base directory',
+      );
       return;
     }
 
@@ -1094,7 +1180,10 @@ function startIpcWatcher(): void {
           }
         }
       } catch (err) {
-        logger.error({ err: formatError(err), sourceGroup }, 'Error reading IPC tasks directory');
+        logger.error(
+          { err: formatError(err), sourceGroup },
+          'Error reading IPC tasks directory',
+        );
       }
     }
   };
@@ -1105,14 +1194,21 @@ function startIpcWatcher(): void {
     if (watchedDirs.has(dir)) return;
 
     try {
-      const watcher = fs.watch(dir, { persistent: false }, (eventType, filename) => {
-        if (filename && filename.endsWith('.json')) {
-          scheduleProcess();
-        }
-      });
+      const watcher = fs.watch(
+        dir,
+        { persistent: false },
+        (eventType, filename) => {
+          if (filename && filename.endsWith('.json')) {
+            scheduleProcess();
+          }
+        },
+      );
 
       watcher.on('error', (err) => {
-        logger.debug({ dir, err: formatError(err) }, 'Watch error, will use polling fallback');
+        logger.debug(
+          { dir, err: formatError(err) },
+          'Watch error, will use polling fallback',
+        );
       });
 
       watchers.push(watcher);
@@ -1129,7 +1225,10 @@ function startIpcWatcher(): void {
     });
     watchers.push(baseWatcher);
   } catch (err) {
-    logger.warn({ err: formatError(err) }, 'Failed to watch IPC base directory');
+    logger.warn(
+      { err: formatError(err) },
+      'Failed to watch IPC base directory',
+    );
   }
 
   // Initial process and fallback polling (slower interval as safety net)
@@ -1325,7 +1424,10 @@ async function processTaskIpc(
       }
       if (data.jid && data.name && data.folder && data.trigger) {
         if (!/^[a-zA-Z0-9_-]+$/.test(data.folder)) {
-          logger.warn({ folder: data.folder }, 'Invalid folder name in register_group IPC');
+          logger.warn(
+            { folder: data.folder },
+            'Invalid folder name in register_group IPC',
+          );
           break;
         }
         registerGroup(data.jid, {
@@ -1351,7 +1453,10 @@ async function processTaskIpc(
         )?.[1];
 
         if (!targetGroup) {
-          logger.warn({ chatJid: data.chatJid }, 'Cannot generate image: group not found');
+          logger.warn(
+            { chatJid: data.chatJid },
+            'Cannot generate image: group not found',
+          );
           break;
         }
 
@@ -1363,9 +1468,15 @@ async function processTaskIpc(
           await bot.sendPhoto(data.chatJid, result.imagePath, {
             caption: `🎨 Generated: ${data.prompt.slice(0, 100)}`,
           });
-          logger.info({ chatJid: data.chatJid, prompt: data.prompt.slice(0, 50) }, 'Image generated and sent');
+          logger.info(
+            { chatJid: data.chatJid, prompt: data.prompt.slice(0, 50) },
+            'Image generated and sent',
+          );
         } else {
-          await sendMessage(data.chatJid, `❌ Image generation failed: ${result.error}`);
+          await sendMessage(
+            data.chatJid,
+            `❌ Image generation failed: ${result.error}`,
+          );
         }
       }
       break;
@@ -1381,10 +1492,18 @@ async function processTaskIpc(
 
 async function connectTelegram(): Promise<void> {
   if (!TELEGRAM_BOT_TOKEN) {
-    console.error('╔══════════════════════════════════════════════════════════════╗');
-    console.error('║  FATAL: TELEGRAM_BOT_TOKEN not set                           ║');
-    console.error('║  Run: npm run setup:telegram                                 ║');
-    console.error('╚══════════════════════════════════════════════════════════════╝');
+    console.error(
+      '╔══════════════════════════════════════════════════════════════╗',
+    );
+    console.error(
+      '║  FATAL: TELEGRAM_BOT_TOKEN not set                           ║',
+    );
+    console.error(
+      '║  Run: npm run setup:telegram                                 ║',
+    );
+    console.error(
+      '╚══════════════════════════════════════════════════════════════╝',
+    );
     process.exit(1);
   }
 
@@ -1470,7 +1589,9 @@ async function connectTelegram(): Promise<void> {
 
           // Validate originalMsgId is numeric
           if (!/^\d+$/.test(originalMsgId)) {
-            await bot.answerCallbackQuery(query.id, { text: 'Invalid message ID' });
+            await bot.answerCallbackQuery(query.id, {
+              text: 'Invalid message ID',
+            });
             return;
           }
 
@@ -1478,7 +1599,9 @@ async function connectTelegram(): Promise<void> {
           const { getMessageById, checkRateLimit } = await import('./db.js');
           const rateCheck = checkRateLimit(`retry:${chatId}`, 5, 60000);
           if (!rateCheck.allowed) {
-            await bot.answerCallbackQuery(query.id, { text: 'Rate limited. Please wait.' });
+            await bot.answerCallbackQuery(query.id, {
+              text: 'Rate limited. Please wait.',
+            });
             return;
           }
 
@@ -1492,9 +1615,15 @@ async function connectTelegram(): Promise<void> {
             const fakeMsg: TelegramBot.Message = {
               message_id: parseInt(originalMsgId),
               chat: { id: parseInt(chatId), type: 'group' },
-              date: Math.floor(new Date(originalMsg.timestamp).getTime() / 1000),
+              date: Math.floor(
+                new Date(originalMsg.timestamp).getTime() / 1000,
+              ),
               text: originalMsg.content,
-              from: { id: parseInt(originalMsg.sender), is_bot: false, first_name: originalMsg.sender_name },
+              from: {
+                id: parseInt(originalMsg.sender),
+                is_bot: false,
+                first_name: originalMsg.sender_name,
+              },
             };
 
             await processMessage(fakeMsg);
@@ -1507,8 +1636,8 @@ async function connectTelegram(): Promise<void> {
           const buttons: QuickReplyButton[][] = [
             [
               { text: '👍', callbackData: `feedback:up:${params[0]}` },
-              { text: '👎', callbackData: `feedback:down:${params[0]}` }
-            ]
+              { text: '👎', callbackData: `feedback:down:${params[0]}` },
+            ],
           ];
           await sendMessageWithButtons(chatId, '您對這個回覆滿意嗎？', buttons);
           break;
@@ -1516,7 +1645,10 @@ async function connectTelegram(): Promise<void> {
         case 'feedback':
           const rating = params[0];
           logger.info({ chatId, rating }, 'User feedback received');
-          await sendMessage(chatId, rating === 'up' ? t().thanksFeedback : t().willImprove);
+          await sendMessage(
+            chatId,
+            rating === 'up' ? t().thanksFeedback : t().willImprove,
+          );
           break;
         default:
           // Pass through to agent if unknown action
@@ -1576,7 +1708,8 @@ async function main(): Promise<void> {
   loadMaintenanceState();
 
   // Start health check server
-  const { setHealthCheckDependencies, startHealthCheckServer } = await import('./health-check.js');
+  const { setHealthCheckDependencies, startHealthCheckServer } =
+    await import('./health-check.js');
   setHealthCheckDependencies({
     getGroupCount: () => Object.keys(registeredGroups).length,
   });
@@ -1587,25 +1720,42 @@ async function main(): Promise<void> {
   if (isSTTAvailable()) {
     const hasFFmpeg = await checkFFmpegAvailability();
     if (!hasFFmpeg) {
-      console.warn('╔══════════════════════════════════════════════════════════════╗');
-      console.warn('║  WARNING: ffmpeg not found on host system                    ║');
-      console.warn('║  STT audio conversion may fail.                              ║');
-      console.warn('║  Please install: brew install ffmpeg                         ║');
-      console.warn('╚══════════════════════════════════════════════════════════════╝');
+      console.warn(
+        '╔══════════════════════════════════════════════════════════════╗',
+      );
+      console.warn(
+        '║  WARNING: ffmpeg not found on host system                    ║',
+      );
+      console.warn(
+        '║  STT audio conversion may fail.                              ║',
+      );
+      console.warn(
+        '║  Please install: brew install ffmpeg                         ║',
+      );
+      console.warn(
+        '╚══════════════════════════════════════════════════════════════╝',
+      );
     }
   }
 
   // Start Dashboard Server (Phase 2)
-  const { startDashboardServer, setGroupsProvider } = await import('./server.js');
-  const { getTaskById, getTasksForGroup, getAllTasks, getErrorState, getGroupMessageStats } = await import('./db.js');
+  const { startDashboardServer, setGroupsProvider } =
+    await import('./server.js');
+  const {
+    getTaskById,
+    getTasksForGroup,
+    getAllTasks,
+    getErrorState,
+    getGroupMessageStats,
+  } = await import('./db.js');
 
   startDashboardServer();
 
   // Inject data provider
   setGroupsProvider(() => {
-    return Object.values(registeredGroups).map(group => {
+    return Object.values(registeredGroups).map((group) => {
       const tasks = getTasksForGroup(group.folder);
-      const activeTasks = tasks.filter(t => t.status === 'active').length;
+      const activeTasks = tasks.filter((t) => t.status === 'active').length;
       const errorState = getErrorState(group.folder);
 
       // Determine status
@@ -1618,10 +1768,14 @@ async function main(): Promise<void> {
         name: group.name,
         status,
         messageCount: (() => {
-          const chatJid = Object.entries(registeredGroups).find(([, g]) => g.folder === group.folder)?.[0];
-          return chatJid ? (getGroupMessageStats(chatJid)?.message_count || 0) : 0;
+          const chatJid = Object.entries(registeredGroups).find(
+            ([, g]) => g.folder === group.folder,
+          )?.[0];
+          return chatJid
+            ? getGroupMessageStats(chatJid)?.message_count || 0
+            : 0;
         })(),
-        activeTasks
+        activeTasks,
       };
     });
   });
