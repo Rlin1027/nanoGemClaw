@@ -510,6 +510,76 @@ export function getRecentUsage(limit = 20): UsageEntry[] {
     .all(limit) as UsageEntry[];
 }
 
+export interface UsageTimeseriesEntry {
+  bucket: string;
+  requests: number;
+  prompt_tokens: number;
+  response_tokens: number;
+  avg_duration_ms: number;
+}
+
+export function getUsageTimeseries(
+  period: string = '7d',
+  granularity: string = 'day',
+  groupFolder?: string,
+): UsageTimeseriesEntry[] {
+  // Calculate the since date from period (e.g., '7d' = 7 days ago, '30d' = 30 days ago, '1d' = today)
+  const days = parseInt(period) || 7;
+  const since = new Date(Date.now() - days * 24 * 60 * 60 * 1000).toISOString();
+
+  // Determine strftime format based on granularity
+  const fmt = granularity === 'hour' ? '%Y-%m-%d %H:00' : '%Y-%m-%d';
+
+  let query = `
+    SELECT strftime('${fmt}', timestamp) as bucket,
+           COUNT(*) as requests,
+           COALESCE(SUM(prompt_tokens), 0) as prompt_tokens,
+           COALESCE(SUM(response_tokens), 0) as response_tokens,
+           COALESCE(AVG(duration_ms), 0) as avg_duration_ms
+    FROM usage_stats
+    WHERE timestamp > ?
+  `;
+  const params: string[] = [since];
+
+  if (groupFolder) {
+    query += ' AND group_folder = ?';
+    params.push(groupFolder);
+  }
+
+  query += ` GROUP BY bucket ORDER BY bucket`;
+
+  return db.prepare(query).all(...params) as UsageTimeseriesEntry[];
+}
+
+export interface UsageByGroupEntry {
+  group_folder: string;
+  requests: number;
+  prompt_tokens: number;
+  response_tokens: number;
+  avg_duration_ms: number;
+}
+
+export function getUsageByGroup(since?: string): UsageByGroupEntry[] {
+  let query = `
+    SELECT group_folder,
+           COUNT(*) as requests,
+           COALESCE(SUM(prompt_tokens), 0) as prompt_tokens,
+           COALESCE(SUM(response_tokens), 0) as response_tokens,
+           COALESCE(AVG(duration_ms), 0) as avg_duration_ms
+    FROM usage_stats
+  `;
+  const params: string[] = [];
+
+  if (since) {
+    query += ' WHERE timestamp > ?';
+    params.push(since);
+  }
+
+  query += ' GROUP BY group_folder ORDER BY requests DESC';
+
+  return db.prepare(query).all(...params) as UsageByGroupEntry[];
+}
+
 // ============================================================================
 // Memory Summaries
 // ============================================================================

@@ -1,4 +1,4 @@
-import { LayoutDashboard, TerminalSquare, Settings, Database, Plus } from "lucide-react";
+import { LayoutDashboard, TerminalSquare, Settings, Database, Plus, CalendarClock, BarChart3 } from "lucide-react";
 import { NavLink, useNavigate } from "react-router-dom";
 import { cn } from "@/lib/utils";
 import { useApiQuery } from "../hooks/useApi";
@@ -55,6 +55,8 @@ export function DashboardLayout({ children }: DashboardLayoutProps) {
                     <NavItem to="/" icon={<LayoutDashboard size={20} />} label="Overview" badge={overviewBadge} />
                     <NavItem to="/logs" icon={<TerminalSquare size={20} />} label="Logs" badge={logsBadge} />
                     <NavItem to="/memory" icon={<Database size={20} />} label="Memory" />
+                    <NavItem to="/tasks" icon={<CalendarClock size={20} />} label="Tasks" />
+                    <NavItem to="/analytics" icon={<BarChart3 size={20} />} label="Analytics" />
                     <NavItem to="/settings" icon={<Settings size={20} />} label="Settings" badge={settingsBadge} />
                 </nav>
 

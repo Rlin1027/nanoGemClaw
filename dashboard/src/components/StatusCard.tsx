@@ -9,9 +9,14 @@ interface StatusCardProps {
     status: AgentStatus;
     messageCount: number;
     activeTasks: number;
+    persona?: string;
+    requireTrigger?: boolean;
+    enableWebSearch?: boolean;
+    folder?: string;
     onHide?: () => void;
     onOpenTerminal?: () => void;
     onViewMemory?: () => void;
+    onClick?: () => void;
 }
 
 const statusColors: Record<AgentStatus, string> = {
@@ -33,16 +38,28 @@ export function StatusCard({
     status,
     messageCount,
     activeTasks,
+    persona,
+    requireTrigger,
+    enableWebSearch,
     onHide,
     onOpenTerminal,
     onViewMemory,
+    onClick,
 }: StatusCardProps) {
     return (
-        <div className={cn(
-            "relative bg-slate-900/50 backdrop-blur-sm border rounded-xl p-5 transition-all duration-300 hover:-translate-y-1",
-            "border-slate-800", // Default border
-            statusColors[status] // Status glow override
-        )}>
+        <div
+            className={cn(
+                "relative bg-slate-900/50 backdrop-blur-sm border rounded-xl p-5 transition-all duration-300 hover:-translate-y-1",
+                "border-slate-800",
+                statusColors[status],
+                onClick && "cursor-pointer"
+            )}
+            onClick={(e) => {
+                // Don't trigger onClick if clicking on buttons
+                if ((e.target as HTMLElement).closest('button')) return;
+                onClick?.();
+            }}
+        >
             {/* Header */}
             <div className="flex justify-between items-start mb-4">
                 <div className="flex items-center gap-3">
@@ -51,24 +68,39 @@ export function StatusCard({
                     </div>
                     <div>
                         <h3 className="font-bold text-slate-100 text-lg leading-tight">{name}</h3>
-                        <span className={cn(
-                            "text-xs font-mono px-2 py-0.5 rounded-full inline-block mt-1",
-                            status === 'error' ? "bg-red-500/20 text-red-300" :
-                                status === 'thinking' ? "bg-blue-500/20 text-blue-300" :
-                                    "bg-green-500/20 text-green-300"
-                        )}>
-                            {statusLabels[status]}
-                        </span>
+                        <div className="flex items-center gap-2 mt-1">
+                            <span className={cn(
+                                "text-xs font-mono px-2 py-0.5 rounded-full inline-block",
+                                status === 'error' ? "bg-red-500/20 text-red-300" :
+                                    status === 'thinking' ? "bg-blue-500/20 text-blue-300" :
+                                        "bg-green-500/20 text-green-300"
+                            )}>
+                                {statusLabels[status]}
+                            </span>
+                            {persona && persona !== 'default' && (
+                                <span className="text-xs px-2 py-0.5 rounded-full bg-purple-500/20 text-purple-300">
+                                    🎭 {persona}
+                                </span>
+                            )}
+                        </div>
                     </div>
                 </div>
 
-                <button
-                    onClick={onHide}
-                    className="text-slate-500 hover:text-slate-300 transition-colors"
-                    title="Hide Card"
-                >
-                    <EyeOff size={18} />
-                </button>
+                <div className="flex items-center gap-1.5">
+                    {requireTrigger === false && (
+                        <span className="text-xs" title="Responds to all messages">📢</span>
+                    )}
+                    {enableWebSearch !== false && (
+                        <span className="text-xs" title="Web Search enabled">🔍</span>
+                    )}
+                    <button
+                        onClick={onHide}
+                        className="text-slate-500 hover:text-slate-300 transition-colors"
+                        title="Hide Card"
+                    >
+                        <EyeOff size={18} />
+                    </button>
+                </div>
             </div>
 
             {/* Stats Grid */}
