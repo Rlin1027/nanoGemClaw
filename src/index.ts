@@ -93,16 +93,18 @@ async function main(): Promise<void> {
 
   // Start Dashboard Server
   const { startDashboardServer, setGroupsProvider, setGroupRegistrar, setGroupUpdater, setChatJidResolver } = await import('./server.js');
-  const { getTasksForGroup, getErrorState, getGroupMessageStats } = await import('./db.js');
+  const { getActiveTaskCountsBatch, getMessageCountsBatch, getErrorState } = await import('./db.js');
 
   startDashboardServer();
 
   // Inject data provider
   setGroupsProvider(() => {
     const registeredGroups = getRegisteredGroups();
+    const activeTaskCounts = getActiveTaskCountsBatch();
+    const messageCounts = getMessageCountsBatch();
+
     return Object.entries(registeredGroups).map(([chatId, group]) => {
-      const tasks = getTasksForGroup(group.folder);
-      const activeTasks = tasks.filter(t => t.status === 'active').length;
+      const activeTasks = activeTaskCounts.get(group.folder) || 0;
       const errorState = getErrorState(group.folder);
 
       let status = 'idle';
@@ -112,9 +114,7 @@ async function main(): Promise<void> {
         id: group.folder,
         name: group.name,
         status,
-        messageCount: (() => {
-          return chatId ? (getGroupMessageStats(chatId)?.message_count || 0) : 0;
-        })(),
+        messageCount: chatId ? (messageCounts.get(chatId) || 0) : 0,
         activeTasks,
         // Extended fields
         persona: group.persona,
@@ -134,7 +134,7 @@ async function main(): Promise<void> {
       trigger: `@${ASSISTANT_NAME}`,
       added_at: new Date().toISOString(),
     });
-    return { chatId, name, folder };
+    return { id: folder, name, folder };
   });
 
   // Inject group updater for dashboard settings API
@@ -156,7 +156,7 @@ async function main(): Promise<void> {
     registeredGroups[chatId] = group;
     saveJson(path.join(DATA_DIR, 'registered_groups.json'), registeredGroups);
 
-    return group;
+    return { ...group, id: folder };
   });
 
   // Inject chat JID resolver for export API

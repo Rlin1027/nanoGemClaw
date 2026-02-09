@@ -7,6 +7,7 @@ import fs from 'fs';
 import path from 'path';
 import os from 'os';
 import { logger, logEmitter, getLogBuffer } from './logger.js';
+import { safeCompare } from './utils/safe-compare.js';
 
 // Route modules
 import { createAuthRouter } from './routes/auth.js';
@@ -29,13 +30,23 @@ const ALLOWED_ORIGINS = (
 const DASHBOARD_HOST = process.env.DASHBOARD_HOST || '127.0.0.1';
 const DASHBOARD_API_KEY = process.env.DASHBOARD_API_KEY;
 
+interface RegisteredGroup {
+  id: string;
+  folder: string;
+  name: string;
+  persona?: string;
+  enableWebSearch?: boolean;
+  requireTrigger?: boolean;
+  geminiModel?: string;
+}
+
 // Application State
 let io: Server;
 let httpServer: ReturnType<typeof createServer> | null = null;
-let groupsProvider: () => any[] = () => [];
-let groupRegistrar: ((chatId: string, name: string) => any) | null = null;
+let groupsProvider: () => RegisteredGroup[] = () => [];
+let groupRegistrar: ((chatId: string, name: string) => RegisteredGroup) | null = null;
 let groupUpdater:
-  | ((folder: string, updates: Record<string, any>) => any)
+  | ((folder: string, updates: Record<string, any>) => RegisteredGroup | null)
   | null = null;
 let chatJidResolver: ((folder: string) => string | null) | null = null;
 
@@ -60,10 +71,11 @@ function validateNumericParam(value: string, name: string): number | null {
  * Validate request body has required fields
  * Returns error message or null if valid
  */
-function validateBody(body: any, requiredFields: string[]): string | null {
+function validateBody(body: unknown, requiredFields: string[]): string | null {
   if (!body || typeof body !== 'object') return 'Invalid request body';
+  const bodyObj = body as Record<string, unknown>;
   for (const field of requiredFields) {
-    if (body[field] === undefined) return `Missing required field: ${field}`;
+    if (bodyObj[field] === undefined) return `Missing required field: ${field}`;
   }
   return null;
 }
@@ -141,8 +153,8 @@ export function startDashboardServer() {
 
     // If ACCESS_CODE is set, require it for all endpoints
     if (ACCESS_CODE) {
-      const code = req.headers['x-access-code'] || req.query.accessCode;
-      if (code !== ACCESS_CODE) {
+      const code = req.headers['x-access-code'];
+      if (!safeCompare(String(code || ''), ACCESS_CODE)) {
         res.status(401).json({ error: 'Authentication required' });
         return;
       }
@@ -150,8 +162,8 @@ export function startDashboardServer() {
 
     // If DASHBOARD_API_KEY is set, require it for all endpoints
     if (DASHBOARD_API_KEY) {
-      const apiKey = req.headers['x-api-key'] || req.query.apiKey;
-      if (apiKey !== DASHBOARD_API_KEY) {
+      const apiKey = req.headers['x-api-key'];
+      if (!safeCompare(String(apiKey || ''), DASHBOARD_API_KEY)) {
         res.status(401).json({ error: 'Unauthorized' });
         return;
       }
@@ -168,14 +180,22 @@ export function startDashboardServer() {
     },
   });
 
-  // Optional Socket.io API key authentication
-  if (DASHBOARD_API_KEY) {
+  // Socket.io authentication - check both ACCESS_CODE and API key
+  if (DASHBOARD_API_KEY || ACCESS_CODE) {
     io.use((socket, next) => {
-      const token =
-        socket.handshake.auth?.token || socket.handshake.query?.apiKey;
-      if (token !== DASHBOARD_API_KEY) {
-        next(new Error('Authentication required'));
-        return;
+      if (ACCESS_CODE) {
+        const code = String(socket.handshake.auth?.accessCode || '');
+        if (!safeCompare(code, ACCESS_CODE)) {
+          next(new Error('Authentication required'));
+          return;
+        }
+      }
+      if (DASHBOARD_API_KEY) {
+        const token = String(socket.handshake.auth?.token || '');
+        if (!safeCompare(token, DASHBOARD_API_KEY)) {
+          next(new Error('Authentication required'));
+          return;
+        }
       }
       next();
     });
@@ -194,7 +214,7 @@ export function startDashboardServer() {
     socket.emit('logs:history', getLogBuffer());
 
     // Stream new log entries
-    const onLog = (entry: any) => {
+    const onLog = (entry: unknown) => {
       socket.emit('logs:entry', entry);
     };
     logEmitter.on('log', onLog);
@@ -306,14 +326,14 @@ export function stopDashboardServer(): void {
 /**
  * Inject the data source for groups
  */
-export function setGroupsProvider(provider: () => any[]) {
+export function setGroupsProvider(provider: () => RegisteredGroup[]) {
   groupsProvider = provider;
 }
 
 /**
  * Inject the group registration function
  */
-export function setGroupRegistrar(fn: (chatId: string, name: string) => any) {
+export function setGroupRegistrar(fn: (chatId: string, name: string) => RegisteredGroup) {
   groupRegistrar = fn;
 }
 
@@ -321,7 +341,7 @@ export function setGroupRegistrar(fn: (chatId: string, name: string) => any) {
  * Inject the group update function
  */
 export function setGroupUpdater(
-  fn: (folder: string, updates: Record<string, any>) => any,
+  fn: (folder: string, updates: Record<string, any>) => RegisteredGroup | null,
 ) {
   groupUpdater = fn;
 }
@@ -336,7 +356,7 @@ export function setChatJidResolver(fn: (folder: string) => string | null) {
 /**
  * Emit a real-time event to the dashboard
  */
-export function emitDashboardEvent(event: string, data: any) {
+export function emitDashboardEvent(event: string, data: unknown) {
   if (io) {
     io.emit(event, data);
   }

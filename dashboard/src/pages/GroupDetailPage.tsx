@@ -1,4 +1,3 @@
-import { useParams, useNavigate } from 'react-router-dom';
 import { ArrowLeft, Loader2 } from 'lucide-react';
 import { useState } from 'react';
 import { useGroupDetail } from '../hooks/useGroupDetail';
@@ -7,7 +6,10 @@ import { ToggleSwitch } from '../components/ToggleSwitch';
 import { StatsCards } from '../components/StatsCards';
 import { TaskList } from '../components/TaskList';
 import { TaskFormModal } from '../components/TaskFormModal';
+import { showToast } from '../hooks/useToast';
 import { useAvailableSkills, useGroupSkills, useToggleSkill } from '../hooks/useSkills';
+import { PreferencesPanel } from '../components/PreferencesPanel';
+import { ExportButton } from '../components/ExportButton';
 
 function SkillsPanel({ groupFolder }: { groupFolder: string }) {
     const { data: allSkills, isLoading: loadingAll } = useAvailableSkills();
@@ -25,8 +27,13 @@ function SkillsPanel({ groupFolder }: { groupFolder: string }) {
     const enabledSet = new Set(enabledSkills || []);
 
     const handleToggle = async (skillId: string, currentlyEnabled: boolean) => {
-        await toggleSkill({ skillId, enabled: !currentlyEnabled });
-        refetch();
+        try {
+            await toggleSkill({ skillId, enabled: !currentlyEnabled });
+            refetch();
+            showToast(`Skill ${!currentlyEnabled ? 'enabled' : 'disabled'} successfully`, 'success');
+        } catch (err) {
+            showToast(err instanceof Error ? err.message : 'Failed to toggle skill');
+        }
     };
 
     return (
@@ -63,10 +70,13 @@ function SkillsPanel({ groupFolder }: { groupFolder: string }) {
     );
 }
 
-export function GroupDetailPage() {
-    const { folder } = useParams<{ folder: string }>();
-    const navigate = useNavigate();
-    const { group, loading, error, refetch, updateSettings } = useGroupDetail(folder);
+interface GroupDetailPageProps {
+    groupFolder: string;
+    onBack: () => void;
+}
+
+export function GroupDetailPage({ groupFolder, onBack }: GroupDetailPageProps) {
+    const { group, loading, error, refetch, updateSettings } = useGroupDetail(groupFolder);
     const [showTaskForm, setShowTaskForm] = useState(false);
     const [saving, setSaving] = useState(false);
 
@@ -74,7 +84,10 @@ export function GroupDetailPage() {
         setSaving(true);
         try {
             await updateSettings(updates);
-        } catch {} finally {
+            showToast('Settings updated successfully', 'success');
+        } catch (err) {
+            showToast(err instanceof Error ? err.message : 'Failed to update settings');
+        } finally {
             setSaving(false);
         }
     };
@@ -91,7 +104,7 @@ export function GroupDetailPage() {
         return (
             <div className="text-center py-20">
                 <p className="text-red-400 mb-4">{error || 'Group not found'}</p>
-                <button onClick={() => navigate('/')} className="text-blue-400 hover:text-blue-300">
+                <button onClick={onBack} className="text-blue-400 hover:text-blue-300">
                     Back to Overview
                 </button>
             </div>
@@ -107,7 +120,7 @@ export function GroupDetailPage() {
             {/* Header */}
             <div className="flex items-center gap-4">
                 <button
-                    onClick={() => navigate('/')}
+                    onClick={onBack}
                     className="p-2 rounded-lg bg-slate-800 hover:bg-slate-700 text-slate-400 transition-colors"
                 >
                     <ArrowLeft size={20} />
@@ -121,6 +134,9 @@ export function GroupDetailPage() {
                 }`}>
                     {group.status}
                 </span>
+                <div className="ml-auto">
+                    <ExportButton groupFolder={groupFolder} />
+                </div>
             </div>
 
             {/* Stats */}
@@ -175,7 +191,13 @@ export function GroupDetailPage() {
             {/* Skills */}
             <div className="space-y-2">
                 <h3 className="text-sm font-medium text-slate-400 uppercase tracking-wider">Skills</h3>
-                <SkillsPanel groupFolder={folder!} />
+                <SkillsPanel groupFolder={groupFolder} />
+            </div>
+
+            {/* Preferences */}
+            <div className="space-y-2">
+                <h3 className="text-sm font-medium text-slate-400 uppercase tracking-wider">Preferences</h3>
+                <PreferencesPanel groupFolder={groupFolder} />
             </div>
 
             {/* Scheduled Tasks */}

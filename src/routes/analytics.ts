@@ -132,7 +132,7 @@ export function createAnalyticsRouter(deps: AnalyticsRouterDeps): Router {
             }
 
             res.json({ data: getUsageTimeseries(period, granularity, groupFolder) });
-        } catch (err) {
+        } catch {
             res.status(500).json({ error: 'Failed to fetch usage timeseries' });
         }
     });
@@ -144,7 +144,7 @@ export function createAnalyticsRouter(deps: AnalyticsRouterDeps): Router {
             const since = req.query.since as string | undefined;
 
             res.json({ data: getUsageByGroup(since) });
-        } catch (err) {
+        } catch {
             res.status(500).json({ error: 'Failed to fetch usage by group' });
         }
     });
@@ -155,7 +155,7 @@ export function createAnalyticsRouter(deps: AnalyticsRouterDeps): Router {
             const { getUsageTimeseriesDaily } = await import('../db.js');
             const days = parseInt(req.query.days as string) || 30;
             res.json({ data: getUsageTimeseriesDaily(days) });
-        } catch (err) {
+        } catch {
             res.status(500).json({ error: 'Failed to fetch timeseries data' });
         }
     });
@@ -166,7 +166,7 @@ export function createAnalyticsRouter(deps: AnalyticsRouterDeps): Router {
             const { getGroupTokenRanking } = await import('../db.js');
             const limit = parseInt(req.query.limit as string) || 10;
             res.json({ data: getGroupTokenRanking(limit) });
-        } catch (err) {
+        } catch {
             res.status(500).json({ error: 'Failed to fetch token ranking' });
         }
     });
@@ -176,7 +176,7 @@ export function createAnalyticsRouter(deps: AnalyticsRouterDeps): Router {
         try {
             const { getResponseTimePercentiles } = await import('../db.js');
             res.json({ data: getResponseTimePercentiles() });
-        } catch (err) {
+        } catch {
             res.status(500).json({ error: 'Failed to fetch response times' });
         }
     });
@@ -187,7 +187,7 @@ export function createAnalyticsRouter(deps: AnalyticsRouterDeps): Router {
             const { getErrorRateTimeseries } = await import('../db.js');
             const days = parseInt(req.query.days as string) || 30;
             res.json({ data: getErrorRateTimeseries(days) });
-        } catch (err) {
+        } catch {
             res.status(500).json({ error: 'Failed to fetch error rate' });
         }
     });

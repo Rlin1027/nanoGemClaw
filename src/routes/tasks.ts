@@ -14,7 +14,7 @@ export function createTasksRouter(deps: TasksRouterDeps): Router {
         try {
             const { getAllTasks } = await import('../db.js');
             res.json({ data: getAllTasks() });
-        } catch (err) {
+        } catch {
             res.status(500).json({ error: 'Failed to fetch tasks' });
         }
     });
@@ -29,7 +29,7 @@ export function createTasksRouter(deps: TasksRouterDeps): Router {
         try {
             const { getTasksForGroup } = await import('../db.js');
             res.json({ data: getTasksForGroup(groupFolder) });
-        } catch (err) {
+        } catch {
             res.status(500).json({ error: 'Failed to fetch tasks' });
         }
     });
@@ -124,7 +124,7 @@ export function createTasksRouter(deps: TasksRouterDeps): Router {
             });
 
             res.json({ data: { id: taskId } });
-        } catch (err) {
+        } catch {
             res.status(500).json({ error: 'Failed to create task' });
         }
     });
@@ -175,7 +175,7 @@ export function createTasksRouter(deps: TasksRouterDeps): Router {
 
             updateTask(taskId, updates);
             res.json({ data: { success: true } });
-        } catch (err) {
+        } catch {
             res.status(500).json({ error: 'Failed to update task' });
         }
     });
@@ -194,7 +194,7 @@ export function createTasksRouter(deps: TasksRouterDeps): Router {
 
             deleteTask(taskId);
             res.json({ data: { success: true } });
-        } catch (err) {
+        } catch {
             res.status(500).json({ error: 'Failed to delete task' });
         }
     });
@@ -219,7 +219,7 @@ export function createTasksRouter(deps: TasksRouterDeps): Router {
 
             updateTask(taskId, { status });
             res.json({ data: { success: true } });
-        } catch (err) {
+        } catch {
             res.status(500).json({ error: 'Failed to update task status' });
         }
     });
@@ -241,7 +241,7 @@ export function createTasksRouter(deps: TasksRouterDeps): Router {
             }
 
             res.json({ data: getTaskRunLogs(taskId, limit) });
-        } catch (err) {
+        } catch {
             res.status(500).json({ error: 'Failed to fetch task runs' });
         }
     });

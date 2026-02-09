@@ -17,8 +17,8 @@ export function createSkillsRouter(deps: SkillsRouterDeps): Router {
             const skillsDir = path.join(GROUPS_DIR, '..', 'container', 'skills');
             const skills = scanAvailableSkills(skillsDir);
             res.json({ data: skills });
-        } catch (err: any) {
-            res.status(500).json({ error: err.message });
+        } catch {
+            res.status(500).json({ error: 'Failed to fetch skills' });
         }
     });
 
@@ -33,8 +33,8 @@ export function createSkillsRouter(deps: SkillsRouterDeps): Router {
             const { getGroupSkills } = await import('../skills.js');
             const skillIds = getGroupSkills(folder);
             res.json({ data: skillIds });
-        } catch (err: any) {
-            res.status(500).json({ error: err.message });
+        } catch {
+            res.status(500).json({ error: 'Failed to fetch group skills' });
         }
     });
 
@@ -58,8 +58,8 @@ export function createSkillsRouter(deps: SkillsRouterDeps): Router {
                 disableGroupSkill(folder, skillId);
             }
             res.json({ data: { success: true } });
-        } catch (err: any) {
-            res.status(500).json({ error: err.message });
+        } catch {
+            res.status(500).json({ error: 'Failed to update skill' });
         }
     });
 

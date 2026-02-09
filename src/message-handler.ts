@@ -219,256 +219,307 @@ const ADMIN_COMMANDS = {
   export: 'Export conversation history for a group',
 } as const;
 
+// Admin command handler types
+type AdminCommandHandler = (args: string[], context: AdminCommandContext) => Promise<string>;
+
+interface AdminCommandContext {
+  registeredGroups: Record<string, RegisteredGroup>;
+  db: {
+    getAllTasks: typeof getAllTasks;
+    getUsageStats: any;
+    getAllErrorStates: any;
+    getConversationExport: any;
+    formatExportAsMarkdown: any;
+  };
+  i18n: {
+    t: any;
+    setLanguage: any;
+    availableLanguages: string[];
+    getLanguage: any;
+  };
+  personas: {
+    getAllPersonas: any;
+  };
+}
+
+// Individual command handlers
+async function handlePersonaCommand(args: string[], ctx: AdminCommandContext): Promise<string> {
+  const subCmd = args[0];
+
+  if (subCmd === 'list') {
+    const allPersonas = ctx.personas.getAllPersonas();
+    return `🎭 **Available Personas**\n\n${Object.entries(allPersonas)
+      .map(([key, p]: [string, any]) => `• \`${key}\`: ${p.name} - ${p.description}`)
+      .join('\n')}`;
+  }
+
+  if (subCmd === 'set' && args[1] && args[2]) {
+    const targetGroup = args[1];
+    const key = args[2];
+
+    let targetId: string | undefined;
+    for (const [id, g] of Object.entries(ctx.registeredGroups)) {
+      if (g.folder === targetGroup || g.name === targetGroup) {
+        targetId = id;
+        break;
+      }
+    }
+
+    if (!targetId) {
+      return `❌ Group not found: ${targetGroup}`;
+    }
+
+    const allPersonas = ctx.personas.getAllPersonas();
+    if (!allPersonas[key]) {
+      return `❌ Invalid persona key: ${key}. Use \`/admin persona list\``;
+    }
+
+    ctx.registeredGroups[targetId].persona = key;
+    saveState();
+    return `✅ Persona for **${ctx.registeredGroups[targetId].name}** set to **${allPersonas[key].name}**`;
+  }
+
+  return 'Usage: `/admin persona list` or `/admin persona set <group_folder> <persona_key>`';
+}
+
+async function handleTriggerCommand(args: string[], ctx: AdminCommandContext): Promise<string> {
+  const targetGroup = args[0];
+  const mode = args[1]?.toLowerCase();
+
+  if (!targetGroup || !mode || !['on', 'off'].includes(mode)) {
+    return 'Usage: `/admin trigger <group_folder> on|off`\n\n`on` = require @trigger prefix\n`off` = respond to all messages';
+  }
+
+  let targetId: string | undefined;
+  for (const [id, g] of Object.entries(ctx.registeredGroups)) {
+    if (g.folder === targetGroup || g.name === targetGroup) {
+      targetId = id;
+      break;
+    }
+  }
+
+  if (!targetId) {
+    return `❌ Group not found: ${targetGroup}`;
+  }
+
+  ctx.registeredGroups[targetId].requireTrigger = mode === 'on';
+  saveJson(path.join(DATA_DIR, 'registered_groups.json'), ctx.registeredGroups);
+  const status = mode === 'on' ? '需要 @trigger 前綴' : '回應所有訊息';
+  return `✅ **${ctx.registeredGroups[targetId].name}** trigger mode: **${mode}** (${status})`;
+}
+
+async function handleStatsCommand(args: string[], ctx: AdminCommandContext): Promise<string> {
+  const groupCount = Object.keys(ctx.registeredGroups).length;
+  const uptime = process.uptime();
+  const uptimeHours = Math.floor(uptime / 3600);
+  const uptimeMinutes = Math.floor((uptime % 3600) / 60);
+
+  const usage = ctx.db.getUsageStats();
+  const avgDuration = usage.total_requests > 0
+    ? Math.round(usage.avg_duration_ms / 1000)
+    : 0;
+
+  return `${ctx.i18n.t().statsTitle}
+
+• ${ctx.i18n.t().registeredGroups}: ${groupCount}
+• ${ctx.i18n.t().uptime}: ${uptimeHours}h ${uptimeMinutes}m
+• ${ctx.i18n.t().memory}: ${Math.round(process.memoryUsage().heapUsed / 1024 / 1024)}MB
+
+${ctx.i18n.t().usageAnalytics}
+• ${ctx.i18n.t().totalRequests}: ${usage.total_requests}
+• ${ctx.i18n.t().avgResponseTime}: ${avgDuration}s
+• ${ctx.i18n.t().totalTokens}: ${usage.total_prompt_tokens + usage.total_response_tokens}`;
+}
+
+async function handleGroupsCommand(args: string[], ctx: AdminCommandContext): Promise<string> {
+  const groups = Object.values(ctx.registeredGroups);
+  if (groups.length === 0) {
+    return '📁 No groups registered.';
+  }
+
+  const groupList = groups.map((g, i) => {
+    const isMain = g.folder === MAIN_GROUP_FOLDER;
+    const searchStatus = g.enableWebSearch !== false ? '🔍' : '';
+    const hasPrompt = g.systemPrompt ? '💬' : '';
+    const triggerStatus = isMain || g.requireTrigger === false ? '📢' : '';
+    return `${i + 1}. **${g.name}** ${isMain ? '(main)' : ''} ${searchStatus}${hasPrompt}${triggerStatus}
+   📁 ${g.folder} | 🎯 ${g.trigger}`;
+  }).join('\n');
+
+  return `📁 **${ctx.i18n.t().registeredGroups}** (${groups.length})
+
+${groupList}
+
+Legend: 🔍=Search 💬=Custom Prompt 📢=All Messages`;
+}
+
+async function handleTasksCommand(args: string[], ctx: AdminCommandContext): Promise<string> {
+  const tasks = ctx.db.getAllTasks();
+  if (tasks.length === 0) {
+    return '📅 No scheduled tasks.';
+  }
+
+  const taskList = tasks.slice(0, 10).map((t: any, i: number) => {
+    const status = t.status === 'active' ? '✅' : t.status === 'paused' ? '⏸️' : '✓';
+    const nextRun = t.next_run ? new Date(t.next_run).toLocaleString() : 'N/A';
+    return `${i + 1}. ${status} **${t.group_folder}**
+   📋 ${t.prompt.slice(0, 50)}${t.prompt.length > 50 ? '...' : ''}
+   ⏰ ${t.schedule_type}: ${t.schedule_value} | Next: ${nextRun}`;
+  }).join('\n');
+
+  const moreText = tasks.length > 10 ? `\n\n_...and ${tasks.length - 10} more tasks_` : '';
+
+  return `📅 **Scheduled Tasks** (${tasks.length})
+
+${taskList}${moreText}`;
+}
+
+async function handleErrorsCommand(args: string[], ctx: AdminCommandContext): Promise<string> {
+  const errorStates = ctx.db.getAllErrorStates();
+
+  if (errorStates.length === 0) {
+    return ctx.i18n.t().noErrors;
+  }
+
+  const errorList = errorStates
+    .filter((e: any) => e.state.consecutiveFailures > 0)
+    .map((e: any) => {
+      const group = ctx.registeredGroups[Object.keys(ctx.registeredGroups).find(
+        k => ctx.registeredGroups[k].folder === e.group
+      ) || ''];
+      return `• **${group?.name || e.group}**: ${e.state.consecutiveFailures} failures\n  Last: ${e.state.lastError?.slice(0, 80)}...`;
+    })
+    .join('\n');
+
+  return errorList
+    ? `${ctx.i18n.t().groupsWithErrors}\n\n${errorList}`
+    : ctx.i18n.t().noActiveErrors;
+}
+
+async function handleReportCommand(args: string[], ctx: AdminCommandContext): Promise<string> {
+  const { getDailyReportMessage } = await import('./daily-report.js');
+  return getDailyReportMessage();
+}
+
+async function handleExportCommand(args: string[], ctx: AdminCommandContext): Promise<string> {
+  const targetFolder = args[0];
+  if (!targetFolder) {
+    return 'Usage: `/admin export <group_folder>`\nExports conversation as a file.';
+  }
+
+  let targetChatId: string | undefined;
+  for (const [id, g] of Object.entries(ctx.registeredGroups)) {
+    if (g.folder === targetFolder || g.name === targetFolder) {
+      targetChatId = id;
+      break;
+    }
+  }
+
+  if (!targetChatId) {
+    return `❌ Group not found: ${targetFolder}`;
+  }
+
+  const exportData = ctx.db.getConversationExport(targetChatId);
+
+  if (exportData.messageCount === 0) {
+    return `📭 No messages found for **${targetFolder}**.`;
+  }
+
+  const md = ctx.db.formatExportAsMarkdown(exportData);
+
+  const tmpPath = path.join(DATA_DIR, `export-${targetFolder}-${Date.now()}.md`);
+  fs.writeFileSync(tmpPath, md, 'utf-8');
+
+  try {
+    const mainChatId = Object.entries(ctx.registeredGroups).find(
+      ([, g]) => g.folder === MAIN_GROUP_FOLDER
+    )?.[0];
+
+    const bot = getBot();
+    if (mainChatId && bot) {
+      await bot.sendDocument(parseInt(mainChatId), tmpPath, {
+        caption: `📤 Export: ${targetFolder} (${exportData.messageCount} messages)`,
+      });
+    }
+  } catch (err) {
+    logger.error({ err: formatError(err) }, 'Failed to send export file');
+  } finally {
+    try { fs.unlinkSync(tmpPath); } catch {}
+  }
+
+  return `✅ Exported **${exportData.messageCount}** messages for **${targetFolder}**.`;
+}
+
+async function handleLanguageCommand(args: string[], ctx: AdminCommandContext): Promise<string> {
+  type Language = import('./i18n.js').Language;
+  const lang = args[0] as Language;
+  if (ctx.i18n.availableLanguages.includes(lang)) {
+    ctx.i18n.setLanguage(lang);
+    saveState();
+    return `✅ Language switched to: **${lang}**`;
+  }
+  return `❌ Invalid language. Available: ${ctx.i18n.availableLanguages.join(', ')}\nCurrent: ${ctx.i18n.getLanguage()}`;
+}
+
+async function handleHelpCommand(args: string[], ctx: AdminCommandContext): Promise<string> {
+  const commandList = Object.entries(ADMIN_COMMANDS)
+    .map(([cmd, desc]) => `• \`/admin ${cmd}\` - ${desc}`)
+    .join('\n');
+
+  return `${ctx.i18n.t().adminCommandsTitle}
+
+${commandList}
+
+${ctx.i18n.t().adminOnlyNote}`;
+}
+
+// Command map
+const ADMIN_COMMAND_HANDLERS: Record<string, AdminCommandHandler> = {
+  persona: handlePersonaCommand,
+  trigger: handleTriggerCommand,
+  stats: handleStatsCommand,
+  groups: handleGroupsCommand,
+  tasks: handleTasksCommand,
+  errors: handleErrorsCommand,
+  report: handleReportCommand,
+  export: handleExportCommand,
+  language: handleLanguageCommand,
+  help: handleHelpCommand,
+};
+
+// Main admin command dispatcher
 async function handleAdminCommand(
   command: string,
   args: string[],
 ): Promise<string> {
-  const { getAllTasks, getUsageStats, getAllErrorStates } = await import('./db.js');
+  const handler = ADMIN_COMMAND_HANDLERS[command] || ADMIN_COMMAND_HANDLERS.help;
+
+  // Load dependencies
+  const { getAllTasks, getUsageStats, getAllErrorStates, getConversationExport, formatExportAsMarkdown } = await import('./db.js');
   const { t, setLanguage, availableLanguages, getLanguage } = await import('./i18n.js');
-  type Language = import('./i18n.js').Language;
-  const { PERSONAS, getAllPersonas } = await import('./personas.js');
+  const { getAllPersonas } = await import('./personas.js');
 
-  const registeredGroups = getRegisteredGroups();
+  const context: AdminCommandContext = {
+    registeredGroups: getRegisteredGroups(),
+    db: {
+      getAllTasks,
+      getUsageStats,
+      getAllErrorStates,
+      getConversationExport,
+      formatExportAsMarkdown,
+    },
+    i18n: {
+      t,
+      setLanguage,
+      availableLanguages,
+      getLanguage,
+    },
+    personas: {
+      getAllPersonas,
+    },
+  };
 
-  switch (command) {
-    case 'persona': {
-      const subCmd = args[0];
-
-      if (subCmd === 'list') {
-        const allPersonas = getAllPersonas();
-        return `\ud83c\udfad **Available Personas**\n\n${Object.entries(allPersonas)
-          .map(([key, p]) => `\u2022 \`${key}\`: ${p.name} - ${p.description}`)
-          .join('\n')}`;
-      }
-
-      if (subCmd === 'set' && args[1] && args[2]) {
-        const targetGroup = args[1]; // folder name or 'main'
-        const key = args[2];
-
-        let targetId: string | undefined;
-        // Resolve group folder
-        for (const [id, g] of Object.entries(registeredGroups)) {
-          if (g.folder === targetGroup || g.name === targetGroup) {
-            targetId = id;
-            break;
-          }
-        }
-
-        if (!targetId) {
-          return `\u274c Group not found: ${targetGroup}`;
-        }
-
-        const allPersonas = getAllPersonas();
-        if (!allPersonas[key]) {
-          return `\u274c Invalid persona key: ${key}. Use \`/admin persona list\``;
-        }
-
-        registeredGroups[targetId].persona = key;
-        saveState();
-        return `\u2705 Persona for **${registeredGroups[targetId].name}** set to **${allPersonas[key].name}**`;
-      }
-
-      return 'Usage: `/admin persona list` or `/admin persona set <group_folder> <persona_key>`';
-    }
-
-    case 'trigger': {
-      const targetGroup = args[0];
-      const mode = args[1]?.toLowerCase();
-
-      if (!targetGroup || !mode || !['on', 'off'].includes(mode)) {
-        return 'Usage: `/admin trigger <group_folder> on|off`\n\n`on` = require @trigger prefix\n`off` = respond to all messages';
-      }
-
-      let targetId: string | undefined;
-      for (const [id, g] of Object.entries(registeredGroups)) {
-        if (g.folder === targetGroup || g.name === targetGroup) {
-          targetId = id;
-          break;
-        }
-      }
-
-      if (!targetId) {
-        return `\u274c Group not found: ${targetGroup}`;
-      }
-
-      registeredGroups[targetId].requireTrigger = mode === 'on';
-      saveJson(path.join(DATA_DIR, 'registered_groups.json'), registeredGroups);
-      const status = mode === 'on' ? '\u9700\u8981 @trigger \u524d\u7db4' : '\u56de\u61c9\u6240\u6709\u8a0a\u606f';
-      return `\u2705 **${registeredGroups[targetId].name}** trigger mode: **${mode}** (${status})`;
-    }
-
-    case 'stats': {
-      const groupCount = Object.keys(registeredGroups).length;
-      const uptime = process.uptime();
-      const uptimeHours = Math.floor(uptime / 3600);
-      const uptimeMinutes = Math.floor((uptime % 3600) / 60);
-
-      // Get usage stats
-      const usage = getUsageStats();
-      const avgDuration = usage.total_requests > 0
-        ? Math.round(usage.avg_duration_ms / 1000)
-        : 0;
-
-      return `${t().statsTitle}
-
-\u2022 ${t().registeredGroups}: ${groupCount}
-\u2022 ${t().uptime}: ${uptimeHours}h ${uptimeMinutes}m
-\u2022 ${t().memory}: ${Math.round(process.memoryUsage().heapUsed / 1024 / 1024)}MB
-
-${t().usageAnalytics}
-\u2022 ${t().totalRequests}: ${usage.total_requests}
-\u2022 ${t().avgResponseTime}: ${avgDuration}s
-\u2022 ${t().totalTokens}: ${usage.total_prompt_tokens + usage.total_response_tokens}`;
-    }
-
-    case 'groups': {
-      const groups = Object.values(registeredGroups);
-      if (groups.length === 0) {
-        return '\ud83d\udcc1 No groups registered.';
-      }
-
-      const groupList = groups.map((g, i) => {
-        const isMain = g.folder === MAIN_GROUP_FOLDER;
-        const searchStatus = g.enableWebSearch !== false ? '\ud83d\udd0d' : '';
-        const hasPrompt = g.systemPrompt ? '\ud83d\udcac' : '';
-        const triggerStatus = isMain || g.requireTrigger === false ? '\ud83d\udce2' : '';
-        return `${i + 1}. **${g.name}** ${isMain ? '(main)' : ''} ${searchStatus}${hasPrompt}${triggerStatus}
-   \ud83d\udcc1 ${g.folder} | \ud83c\udfaf ${g.trigger}`;
-      }).join('\n');
-
-      return `\ud83d\udcc1 **${t().registeredGroups}** (${groups.length})
-
-${groupList}
-
-Legend: \ud83d\udd0d=Search \ud83d\udcac=Custom Prompt \ud83d\udce2=All Messages`;
-    }
-
-    case 'tasks': {
-      const tasks = getAllTasks();
-      if (tasks.length === 0) {
-        return '\ud83d\udcc5 No scheduled tasks.';
-      }
-
-      const taskList = tasks.slice(0, 10).map((t, i) => {
-        const status = t.status === 'active' ? '\u2705' : t.status === 'paused' ? '\u23f8\ufe0f' : '\u2713';
-        const nextRun = t.next_run ? new Date(t.next_run).toLocaleString() : 'N/A';
-        return `${i + 1}. ${status} **${t.group_folder}**
-   \ud83d\udccb ${t.prompt.slice(0, 50)}${t.prompt.length > 50 ? '...' : ''}
-   \u23f0 ${t.schedule_type}: ${t.schedule_value} | Next: ${nextRun}`;
-      }).join('\n');
-
-      const moreText = tasks.length > 10 ? `\n\n_...and ${tasks.length - 10} more tasks_` : '';
-
-      return `\ud83d\udcc5 **Scheduled Tasks** (${tasks.length})
-
-${taskList}${moreText}`;
-    }
-
-    case 'errors': {
-      const errorStates = getAllErrorStates();
-
-      if (errorStates.length === 0) {
-        return t().noErrors;
-      }
-
-      const errorList = errorStates
-        .filter(e => e.state.consecutiveFailures > 0)
-        .map(e => {
-          const group = registeredGroups[Object.keys(registeredGroups).find(
-            k => registeredGroups[k].folder === e.group
-          ) || ''];
-          return `\u2022 **${group?.name || e.group}**: ${e.state.consecutiveFailures} failures\n  Last: ${e.state.lastError?.slice(0, 80)}...`;
-        })
-        .join('\n');
-
-      return errorList
-        ? `${t().groupsWithErrors}\n\n${errorList}`
-        : t().noActiveErrors;
-    }
-
-    case 'report': {
-      const { getDailyReportMessage } = await import('./daily-report.js');
-      return getDailyReportMessage();
-    }
-
-    case 'export': {
-      const targetFolder = args[0];
-      if (!targetFolder) {
-        return 'Usage: `/admin export <group_folder>`\nExports conversation as a file.';
-      }
-
-      // Find chatId for this folder
-      let targetChatId: string | undefined;
-      for (const [id, g] of Object.entries(registeredGroups)) {
-        if (g.folder === targetFolder || g.name === targetFolder) {
-          targetChatId = id;
-          break;
-        }
-      }
-
-      if (!targetChatId) {
-        return `\u274c Group not found: ${targetFolder}`;
-      }
-
-      const { getConversationExport, formatExportAsMarkdown } = await import('./db.js');
-      const exportData = getConversationExport(targetChatId);
-
-      if (exportData.messageCount === 0) {
-        return `\ud83d\udced No messages found for **${targetFolder}**.`;
-      }
-
-      const md = formatExportAsMarkdown(exportData);
-
-      // Write to temp file and send via Telegram
-      const tmpPath = path.join(DATA_DIR, `export-${targetFolder}-${Date.now()}.md`);
-      fs.writeFileSync(tmpPath, md, 'utf-8');
-
-      try {
-        // Send the file. We need to find a main group chatId to send to.
-        // The admin command is executed from the main group, so we use MAIN_GROUP_FOLDER
-        const mainChatId = Object.entries(registeredGroups).find(
-          ([, g]) => g.folder === MAIN_GROUP_FOLDER
-        )?.[0];
-
-        const bot = getBot();
-        if (mainChatId && bot) {
-          await bot.sendDocument(parseInt(mainChatId), tmpPath, {
-            caption: `\ud83d\udce4 Export: ${targetFolder} (${exportData.messageCount} messages)`,
-          });
-        }
-      } catch (err) {
-        logger.error({ err: formatError(err) }, 'Failed to send export file');
-      } finally {
-        // Clean up temp file
-        try { fs.unlinkSync(tmpPath); } catch {}
-      }
-
-      return `\u2705 Exported **${exportData.messageCount}** messages for **${targetFolder}**.`;
-    }
-
-    case 'language': {
-      const lang = args[0] as Language;
-      if (availableLanguages.includes(lang)) {
-        setLanguage(lang);
-        saveState(); // Persist change
-        return `\u2705 Language switched to: **${lang}**`;
-      }
-      return `\u274c Invalid language. Available: ${availableLanguages.join(', ')}\nCurrent: ${getLanguage()}`;
-    }
-
-    case 'help':
-    default: {
-      const commandList = Object.entries(ADMIN_COMMANDS)
-        .map(([cmd, desc]) => `\u2022 \`/admin ${cmd}\` - ${desc}`)
-        .join('\n');
-
-      return `${t().adminCommandsTitle}
-
-${commandList}
-
-${t().adminOnlyNote}`;
-    }
-  }
+  return handler(args, context);
 }
 
 // ============================================================================
@@ -489,7 +540,7 @@ export async function processMessage(msg: TelegramBot.Message): Promise<void> {
 
   // Maintenance mode: auto-reply and skip processing
   if (isMaintenanceMode()) {
-    await bot.sendMessage(parseInt(chatId), '\u2699\ufe0f \u7cfb\u7d71\u7dad\u8b77\u4e2d\uff0c\u8acb\u7a0d\u5f8c\u518d\u8a66\u3002');
+    await bot.sendMessage(parseInt(chatId), '⚙️ 系統維護中，請稍後再試。');
     return;
   }
 
@@ -508,7 +559,7 @@ export async function processMessage(msg: TelegramBot.Message): Promise<void> {
       await sendMessage(chatId, response);
     } catch (err) {
       logger.error({ err: formatError(err) }, 'Admin command failed');
-      await sendMessage(chatId, '\u274c Admin command failed. Check logs for details.');
+      await sendMessage(chatId, '❌ Admin command failed. Check logs for details.');
     }
     return;
   }
@@ -548,8 +599,8 @@ export async function processMessage(msg: TelegramBot.Message): Promise<void> {
   if (msg.reply_to_message) {
     const replyMsg = msg.reply_to_message;
     const replySender = replyMsg.from?.first_name || 'Unknown';
-    const replyContent = replyMsg.text || replyMsg.caption || '[\u975e\u6587\u5b57\u5167\u5bb9]';
-    replyContext = `[\u56de\u8986 ${replySender} \u7684\u8a0a\u606f: "${replyContent.slice(0, 200)}${replyContent.length > 200 ? '...' : ''}"]\n`;
+    const replyContent = replyMsg.text || replyMsg.caption || '[非文字內容]';
+    replyContext = `[回復 ${replySender} 的訊息: "${replyContent.slice(0, 200)}${replyContent.length > 200 ? '...' : ''}"]\n`;
     content = replyContext + content;
     logger.info({ chatId, replyToId: replyMsg.message_id }, 'Processing reply context');
   }
@@ -560,12 +611,12 @@ export async function processMessage(msg: TelegramBot.Message): Promise<void> {
   let statusMsg: TelegramBot.Message | null = null;
 
   // Send status message for processing requests
-  statusMsg = await bot.sendMessage(chatId, `\u23f3 ${t().processing}...`, {
+  statusMsg = await bot.sendMessage(chatId, `⏳ ${t().processing}...`, {
     reply_to_message_id: msg.message_id,
   });
 
   if (mediaInfo) {
-    await bot.editMessageText(`\ud83d\udce5 ${t().downloadingMedia}...`, {
+    await bot.editMessageText(`📥 ${t().downloadingMedia}...`, {
       chat_id: chatId,
       message_id: statusMsg.message_id,
     });
@@ -578,14 +629,14 @@ export async function processMessage(msg: TelegramBot.Message): Promise<void> {
       if (mediaInfo.type === 'voice') {
         // Check voice duration (Telegram provides this in msg.voice.duration)
         if (msg.voice?.duration && msg.voice.duration > 300) {
-          await bot.editMessageText(`\u26a0\ufe0f ${t().stt_too_long}`, {
+          await bot.editMessageText(`⚠️ ${t().stt_too_long}`, {
             chat_id: chatId,
             message_id: statusMsg.message_id,
           });
           return;
         }
 
-        await bot.editMessageText(`\ud83e\udde0 ${t().transcribing}...`, {
+        await bot.editMessageText(`🧠 ${t().transcribing}...`, {
           chat_id: chatId,
           message_id: statusMsg.message_id,
         });
@@ -595,10 +646,10 @@ export async function processMessage(msg: TelegramBot.Message): Promise<void> {
         try {
           transcription = await transcribeAudio(mediaPath);
           // Echo transcription back to user
-          await sendMessage(chatId, `\ud83c\udfa4 ${t().stt_transcribed}: "${transcription}"`);
+          await sendMessage(chatId, `🎤 ${t().stt_transcribed}: "${transcription}"`);
           logger.info({ chatId, transcription: transcription.slice(0, 100) }, 'Voice message transcribed');
         } catch (err) {
-          await bot.editMessageText(`\u274c ${t().stt_error}`, {
+          await bot.editMessageText(`❌ ${t().stt_error}`, {
             chat_id: chatId,
             message_id: statusMsg.message_id,
           });
@@ -612,7 +663,7 @@ export async function processMessage(msg: TelegramBot.Message): Promise<void> {
     }
   }
 
-  await bot.editMessageText(`\ud83e\udd16 ${t().thinking}...`, {
+  await bot.editMessageText(`🤖 ${t().thinking}...`, {
     chat_id: chatId,
     message_id: statusMsg.message_id,
   });
@@ -669,8 +720,8 @@ export async function processMessage(msg: TelegramBot.Message): Promise<void> {
       // Build buttons: always include retry/feedback, add follow-ups if present
       const buttons: QuickReplyButton[][] = [
         [
-          { text: `\ud83d\udd04 ${t().retry}`, callbackData: `retry:${msg.message_id}` },
-          { text: `\ud83d\udcac ${t().feedback}`, callbackData: `feedback_menu:${msg.message_id}` }
+          { text: `🔄 ${t().retry}`, callbackData: `retry:${msg.message_id}` },
+          { text: `💬 ${t().feedback}`, callbackData: `feedback_menu:${msg.message_id}` }
         ]
       ];
 
@@ -678,7 +729,7 @@ export async function processMessage(msg: TelegramBot.Message): Promise<void> {
       if (followUps.length > 0) {
         for (const suggestion of followUps) {
           buttons.push([
-            { text: `\ud83d\udca1 ${suggestion}`, callbackData: JSON.stringify({ type: 'reply', data: suggestion }) }
+            { text: `💡 ${suggestion}`, callbackData: JSON.stringify({ type: 'reply', data: suggestion }) }
           ]);
         }
       }
@@ -689,12 +740,12 @@ export async function processMessage(msg: TelegramBot.Message): Promise<void> {
       await bot.deleteMessage(parseInt(chatId), statusMsg.message_id).catch(() => { });
     } else if (statusMsg) {
       // If no response, update status message to error with retry button
-      await bot.editMessageText(`\u274c ${t().errorOccurred}`, {
+      await bot.editMessageText(`❌ ${t().errorOccurred}`, {
         chat_id: parseInt(chatId),
         message_id: statusMsg.message_id,
         reply_markup: {
           inline_keyboard: [[
-            { text: '\ud83d\udd04 Retry', callback_data: `retry:${msg.message_id}` }
+            { text: '🔄 Retry', callback_data: `retry:${msg.message_id}` }
           ]]
         }
       }).catch(() => { });
@@ -739,8 +790,34 @@ function extractFollowUps(text: string): { cleanText: string; followUps: string[
 }
 
 // ============================================================================
-// Agent Execution
+// Agent Execution with Retry Helper
 // ============================================================================
+
+interface RetryOptions {
+  maxRetries: number;
+  shouldRetry: (error: unknown, attempt: number) => boolean;
+  onRetry?: (error: unknown, attempt: number) => void;
+}
+
+async function withRetry<T>(
+  fn: () => Promise<T>,
+  options: RetryOptions
+): Promise<T> {
+  let lastError: unknown;
+  for (let attempt = 0; attempt <= options.maxRetries; attempt++) {
+    try {
+      return await fn();
+    } catch (err) {
+      lastError = err;
+      if (attempt < options.maxRetries && options.shouldRetry(err, attempt)) {
+        options.onRetry?.(err, attempt);
+        continue;
+      }
+      throw err;
+    }
+  }
+  throw lastError;
+}
 
 async function runAgent(
   group: RegisteredGroup,
@@ -787,17 +864,17 @@ async function runAgent(
   const onProgress = async (info: ProgressInfo) => {
     if (!statusMsg) return;
     try {
-      let progressText = '\ud83e\udd16 \u601d\u8003\u4e2d...';
+      let progressText = '🤖 思考中...';
       if (info.type === 'tool_use') {
         const toolEmoji: Record<string, string> = {
-          'google_search': '\ud83d\udd0d \u6b63\u5728\u641c\u5c0b\u7db2\u8def...',
-          'web_search': '\ud83d\udd0d \u6b63\u5728\u641c\u5c0b\u7db2\u8def...',
-          'read_file': '\ud83d\udcc4 \u6b63\u5728\u8b80\u53d6\u6a94\u6848...',
-          'write_file': '\u270d\ufe0f \u6b63\u5728\u5beb\u5165...',
-          'generate_image': '\ud83c\udfa8 \u6b63\u5728\u751f\u6210\u5716\u7247...',
-          'execute_code': '\u2699\ufe0f \u6b63\u5728\u57f7\u884c\u7a0b\u5f0f...',
+          'google_search': '🔍 正在搜尋網路...',
+          'web_search': '🔍 正在搜尋網路...',
+          'read_file': '📄 正在讀取檔案...',
+          'write_file': '✍️ 正在寫入...',
+          'generate_image': '🎨 正在生成圖片...',
+          'execute_code': '⚙️ 正在執行程式...',
         };
-        progressText = toolEmoji[info.toolName || ''] || `\ud83d\udd27 \u4f7f\u7528\u5de5\u5177: ${info.toolName}...`;
+        progressText = toolEmoji[info.toolName || ''] || `🔧 使用工具: ${info.toolName}...`;
         await bot.editMessageText(progressText, {
           chat_id: chatId,
           message_id: statusMsg.message_id,
@@ -808,8 +885,8 @@ async function runAgent(
           // Check rate limit before editing
           if (telegramRateLimiter.canEdit(chatId)) {
             const truncated = safeMarkdownTruncate(info.contentSnapshot, 4096);
-            const streamingIndicator = info.isComplete ? '' : ' \u23f3';
-            await bot.editMessageText(`\ud83d\udcac ${truncated}${streamingIndicator}`, {
+            const streamingIndicator = info.isComplete ? '' : ' ⏳';
+            await bot.editMessageText(`💬 ${truncated}${streamingIndicator}`, {
               chat_id: chatId,
               message_id: statusMsg.message_id,
               parse_mode: 'Markdown',
@@ -818,7 +895,7 @@ async function runAgent(
           }
         } else if (info.content || info.contentSnapshot) {
           // Short response or fallback
-          progressText = `\ud83d\udcac \u56de\u61c9\u4e2d...`;
+          progressText = `💬 回應中...`;
           await bot.editMessageText(progressText, {
             chat_id: chatId,
             message_id: statusMsg.message_id,
@@ -837,18 +914,24 @@ async function runAgent(
     const { getMemoryContext } = await import('./memory-summarizer.js');
     const memoryContext = getMemoryContext(group.folder);
 
-    const output = await runContainerAgent(group, {
-      prompt,
-      sessionId,
-      groupFolder: group.folder,
-      chatJid: chatId, // Using chatId as chatJid for compatibility
-      isMain,
-      systemPrompt: group.systemPrompt,
-      persona: group.persona,
-      enableWebSearch: group.enableWebSearch ?? true, // Default: enabled
-      mediaPath: mediaPath ? `/workspace/group/media/${path.basename(mediaPath)}` : undefined,
-      memoryContext: memoryContext ?? undefined,
-    }, onProgress);
+    // Helper to run container agent once
+    const runOnce = async (useSessionId?: string) => {
+      return await runContainerAgent(group, {
+        prompt,
+        sessionId: useSessionId,
+        groupFolder: group.folder,
+        chatJid: chatId,
+        isMain,
+        systemPrompt: group.systemPrompt,
+        persona: group.persona,
+        enableWebSearch: group.enableWebSearch ?? true,
+        mediaPath: mediaPath ? `/workspace/group/media/${path.basename(mediaPath)}` : undefined,
+        memoryContext: memoryContext ?? undefined,
+      }, onProgress);
+    };
+
+    // First attempt with session
+    const output = await runOnce(sessionId);
 
     if (output.newSessionId) {
       sessions[group.folder] = output.newSessionId;
@@ -856,24 +939,13 @@ async function runAgent(
     }
 
     if (output.status === 'error') {
-      // Auto-retry without session if resume failed
+      // Retry logic for session resume failure
       if (sessionId && output.error?.includes('No previous sessions found')) {
         logger.warn({ group: group.name }, 'Session resume failed, retrying without session');
         delete sessions[group.folder];
         saveJson(path.join(DATA_DIR, 'sessions.json'), sessions);
 
-        const retryOutput = await runContainerAgent(group, {
-          prompt,
-          sessionId: undefined,
-          groupFolder: group.folder,
-          chatJid: chatId,
-          isMain,
-          systemPrompt: group.systemPrompt,
-          persona: group.persona,
-          enableWebSearch: group.enableWebSearch ?? true,
-          mediaPath: mediaPath ? `/workspace/group/media/${path.basename(mediaPath)}` : undefined,
-          memoryContext: memoryContext ?? undefined,
-        });
+        const retryOutput = await runOnce(undefined);
 
         if (retryOutput.newSessionId) {
           sessions[group.folder] = retryOutput.newSessionId;
@@ -887,7 +959,7 @@ async function runAgent(
         return retryOutput.result;
       }
 
-      // Auto-retry on timeout or non-zero exit (fresh session)
+      // Retry logic for timeout or non-zero exit
       const isTimeout = output.error?.includes('Container timed out after');
       const isNonZeroExit = output.error?.includes('Container exited with code');
 
@@ -896,7 +968,7 @@ async function runAgent(
 
         // Send retry status update to chat
         try {
-          await bot.sendMessage(parseInt(chatId), '\ud83d\udd04 \u91cd\u8a66\u4e2d...').catch(() => {});
+          await bot.sendMessage(parseInt(chatId), '🔄 重試中...').catch(() => {});
         } catch {}
 
         // Wait 2 seconds before retry
@@ -906,18 +978,7 @@ async function runAgent(
         delete sessions[group.folder];
         saveJson(path.join(DATA_DIR, 'sessions.json'), sessions);
 
-        const retryOutput = await runContainerAgent(group, {
-          prompt,
-          sessionId: undefined,
-          groupFolder: group.folder,
-          chatJid: chatId,
-          isMain,
-          systemPrompt: group.systemPrompt,
-          persona: group.persona,
-          enableWebSearch: group.enableWebSearch ?? true,
-          mediaPath: mediaPath ? `/workspace/group/media/${path.basename(mediaPath)}` : undefined,
-          memoryContext: memoryContext ?? undefined,
-        });
+        const retryOutput = await runOnce(undefined);
 
         if (retryOutput.newSessionId) {
           sessions[group.folder] = retryOutput.newSessionId;

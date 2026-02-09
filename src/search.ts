@@ -75,9 +75,9 @@ export function searchMessages(
   const limit = options?.limit ?? 20;
   const offset = options?.offset ?? 0;
 
-  // Escape FTS5 special characters
-  const escapedQuery = query.replace(/['"]/g, '');
-  if (!escapedQuery.trim()) {
+  // Escape FTS5 special characters - wrap in quotes to treat as literal phrase
+  const escapedQuery = `"${query.replace(/"/g, '""')}"`;
+  if (!query.trim()) {
     return { results: [], total: 0 };
   }
 

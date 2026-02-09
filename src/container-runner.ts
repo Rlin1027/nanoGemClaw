@@ -417,8 +417,6 @@ Only suggest follow-ups when they genuinely add value. Do not suggest them for s
   // Inject environment variables before the image argument
   baseArgs.push(
     '-e',
-    `GEMINI_API_KEY=${process.env.GEMINI_API_KEY || ''}`,
-    '-e',
     `GEMINI_SYSTEM_PROMPT=${sanitizedPrompt}`,
     '-e',
     `GEMINI_ENABLE_SEARCH=${input.enableWebSearch !== false ? 'true' : 'false'}`,
@@ -440,7 +438,9 @@ Only suggest follow-ups when they genuinely add value. Do not suggest them for s
         (m) =>
           `${m.hostPath} -> ${m.containerPath}${m.readonly ? ' (ro)' : ''}`,
       ),
-      containerArgs: containerArgs.join(' '),
+      containerArgs: containerArgs.map(a =>
+        a.startsWith('GEMINI_API_KEY=') ? 'GEMINI_API_KEY=[REDACTED]' : a
+      ).join(' '),
     },
     'Container mount configuration',
   );

@@ -1,6 +1,7 @@
 import { useState } from 'react';
-import { Play, Pause, Trash2, ChevronDown, ChevronRight } from 'lucide-react';
+import { Play, Pause, Trash2, ChevronDown, ChevronRight, Loader2 } from 'lucide-react';
 import { apiFetch } from '../hooks/useApi';
+import { showToast } from '../hooks/useToast';
 import { cn } from '@/lib/utils';
 
 interface Task {
@@ -46,7 +47,9 @@ export function TaskList({ tasks, onRefresh, showGroup = true }: TaskListProps) 
             try {
                 const res = await apiFetch<{ data: TaskRunLog[] }>(`/api/tasks/${taskId}/runs`);
                 setRunLogs(prev => ({ ...prev, [taskId]: res.data }));
-            } catch {}
+            } catch (err) {
+                showToast(err instanceof Error ? err.message : 'Failed to load run logs');
+            }
         }
     };
 
@@ -58,7 +61,9 @@ export function TaskList({ tasks, onRefresh, showGroup = true }: TaskListProps) 
                 body: JSON.stringify({ status }),
             });
             onRefresh();
-        } catch {} finally {
+        } catch (err) {
+            showToast(err instanceof Error ? err.message : 'Failed to update task status');
+        } finally {
             setActionLoading(null);
         }
     };
@@ -69,7 +74,9 @@ export function TaskList({ tasks, onRefresh, showGroup = true }: TaskListProps) 
         try {
             await apiFetch(`/api/tasks/${taskId}`, { method: 'DELETE' });
             onRefresh();
-        } catch {} finally {
+        } catch (err) {
+            showToast(err instanceof Error ? err.message : 'Failed to delete task');
+        } finally {
             setActionLoading(null);
         }
     };
@@ -107,54 +114,73 @@ export function TaskList({ tasks, onRefresh, showGroup = true }: TaskListProps) 
                         </span>
 
                         <div className="flex items-center gap-1" onClick={e => e.stopPropagation()}>
-                            {task.status === 'active' ? (
-                                <button
-                                    onClick={() => handleStatusChange(task.id, 'paused')}
-                                    disabled={actionLoading === task.id}
-                                    className="p-1.5 text-slate-400 hover:text-yellow-400 transition-colors"
-                                    title="Pause"
-                                >
-                                    <Pause size={16} />
-                                </button>
-                            ) : task.status === 'paused' ? (
-                                <button
-                                    onClick={() => handleStatusChange(task.id, 'active')}
-                                    disabled={actionLoading === task.id}
-                                    className="p-1.5 text-slate-400 hover:text-green-400 transition-colors"
-                                    title="Resume"
-                                >
-                                    <Play size={16} />
-                                </button>
-                            ) : null}
-                            <button
-                                onClick={() => handleDelete(task.id)}
-                                disabled={actionLoading === task.id}
-                                className="p-1.5 text-slate-400 hover:text-red-400 transition-colors"
-                                title="Delete"
-                            >
-                                <Trash2 size={16} />
-                            </button>
+                            {actionLoading === task.id ? (
+                                <span className="p-1.5"><Loader2 size={16} className="animate-spin text-slate-500" /></span>
+                            ) : (
+                                <>
+                                    {task.status === 'active' ? (
+                                        <button
+                                            onClick={() => handleStatusChange(task.id, 'paused')}
+                                            className="p-1.5 text-slate-400 hover:text-yellow-400 transition-colors"
+                                            title="Pause"
+                                        >
+                                            <Pause size={16} />
+                                        </button>
+                                    ) : task.status === 'paused' ? (
+                                        <button
+                                            onClick={() => handleStatusChange(task.id, 'active')}
+                                            className="p-1.5 text-slate-400 hover:text-green-400 transition-colors"
+                                            title="Resume"
+                                        >
+                                            <Play size={16} />
+                                        </button>
+                                    ) : null}
+                                    <button
+                                        onClick={() => handleDelete(task.id)}
+                                        className="p-1.5 text-slate-400 hover:text-red-400 transition-colors"
+                                        title="Delete"
+                                    >
+                                        <Trash2 size={16} />
+                                    </button>
+                                </>
+                            )}
                         </div>
                     </div>
 
                     {/* Expanded: Run Logs */}
                     {expandedTask === task.id && (
                         <div className="border-t border-slate-800 p-4 bg-slate-950/50">
-                            <div className="text-xs font-medium text-slate-400 mb-2">Run History</div>
+                            <div className="text-xs font-medium text-slate-400 mb-3">Run History</div>
                             {(runLogs[task.id] || []).length === 0 ? (
                                 <div className="text-xs text-slate-600">No runs yet</div>
                             ) : (
-                                <div className="space-y-1">
-                                    {(runLogs[task.id] || []).map((log, i) => (
-                                        <div key={i} className="flex items-center gap-3 text-xs">
-                                            <span className={log.status === 'success' ? 'text-green-400' : 'text-red-400'}>
+                                <div className="space-y-1.5">
+                                    {(runLogs[task.id] || []).slice(0, 10).map((log, i) => (
+                                        <div key={i} className={cn(
+                                            "flex items-center gap-3 text-xs px-2.5 py-1.5 rounded-md",
+                                            log.status === 'success' ? 'bg-green-500/5' : 'bg-red-500/5'
+                                        )}>
+                                            <span className={cn(
+                                                "w-5 h-5 rounded-full flex items-center justify-center text-[10px] font-bold flex-shrink-0",
+                                                log.status === 'success'
+                                                    ? 'bg-green-500/20 text-green-400'
+                                                    : 'bg-red-500/20 text-red-400'
+                                            )}>
                                                 {log.status === 'success' ? '✓' : '✗'}
                                             </span>
-                                            <span className="text-slate-500">{new Date(log.run_at).toLocaleString()}</span>
-                                            <span className="text-slate-600">{(log.duration_ms / 1000).toFixed(1)}s</span>
-                                            {log.error && <span className="text-red-400 truncate">{log.error}</span>}
+                                            <span className="text-slate-400">{new Date(log.run_at).toLocaleString()}</span>
+                                            <span className="text-slate-600 font-mono">{(log.duration_ms / 1000).toFixed(1)}s</span>
+                                            {log.result && !log.error && (
+                                                <span className="text-slate-500 truncate flex-1">{log.result.slice(0, 80)}</span>
+                                            )}
+                                            {log.error && <span className="text-red-400 truncate flex-1">{log.error}</span>}
                                         </div>
                                     ))}
+                                    {(runLogs[task.id] || []).length > 10 && (
+                                        <div className="text-[10px] text-slate-600 px-2.5">
+                                            +{(runLogs[task.id] || []).length - 10} more runs
+                                        </div>
+                                    )}
                                 </div>
                             )}
                         </div>

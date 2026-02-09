@@ -1,6 +1,8 @@
 import { useState } from 'react';
 import { Lock, Loader2, ArrowRight } from 'lucide-react';
 
+const API_BASE = import.meta.env.VITE_API_URL || window.location.origin;
+
 interface LoginScreenProps {
     onSuccess: () => void;
 }
@@ -17,7 +19,7 @@ export function LoginScreen({ onSuccess }: LoginScreenProps) {
 
         try {
             // Direct verification via API
-            const res = await fetch('http://localhost:3000/api/auth/verify', {
+            const res = await fetch(`${API_BASE}/api/auth/verify`, {
                 method: 'POST',
                 headers: {
                     'Content-Type': 'application/json',

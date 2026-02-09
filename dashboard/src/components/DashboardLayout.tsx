@@ -1,13 +1,14 @@
-import { LayoutDashboard, TerminalSquare, Settings, Database, Plus, CalendarClock, BarChart3, BookOpen } from "lucide-react";
+import { LayoutDashboard, TerminalSquare, Settings, Database, Plus, CalendarClock, BarChart3, BookOpen, Calendar, Search } from "lucide-react";
 import { cn } from "@/lib/utils";
 
 interface DashboardLayoutProps {
     children: React.ReactNode;
     activeTab?: string;
     onTabChange?: (tab: string) => void;
+    onSearchOpen?: () => void;
 }
 
-export function DashboardLayout({ children, activeTab = 'overview', onTabChange }: DashboardLayoutProps) {
+export function DashboardLayout({ children, activeTab = 'overview', onTabChange, onSearchOpen }: DashboardLayoutProps) {
 
     return (
         <div className="min-h-screen bg-slate-950 text-slate-200 flex font-sans selection:bg-blue-500/30">
@@ -21,49 +22,74 @@ export function DashboardLayout({ children, activeTab = 'overview', onTabChange 
                     </span>
                 </div>
 
-                <nav className="flex-1 p-2 space-y-2 mt-4">
-                    <NavItem
-                        icon={<LayoutDashboard size={20} />}
-                        label="Overview"
-                        active={activeTab === 'overview'}
-                        onClick={() => onTabChange?.('overview')}
-                    />
-                    <NavItem
-                        icon={<TerminalSquare size={20} />}
-                        label="Logs"
-                        active={activeTab === 'logs'}
-                        onClick={() => onTabChange?.('logs')}
-                    />
-                    <NavItem
-                        icon={<Database size={20} />}
-                        label="Memory"
-                        active={activeTab === 'memory'}
-                        onClick={() => onTabChange?.('memory')}
-                    />
-                    <NavItem
-                        icon={<BookOpen size={20} />}
-                        label="Knowledge"
-                        active={activeTab === 'knowledge'}
-                        onClick={() => onTabChange?.('knowledge')}
-                    />
-                    <NavItem
-                        icon={<CalendarClock size={20} />}
-                        label="Tasks"
-                        active={activeTab === 'tasks'}
-                        onClick={() => onTabChange?.('tasks')}
-                    />
-                    <NavItem
-                        icon={<BarChart3 size={20} />}
-                        label="Analytics"
-                        active={activeTab === 'analytics'}
-                        onClick={() => onTabChange?.('analytics')}
-                    />
-                    <NavItem
-                        icon={<Settings size={20} />}
-                        label="Settings"
-                        active={activeTab === 'settings'}
-                        onClick={() => onTabChange?.('settings')}
-                    />
+                <nav className="flex-1 p-2 mt-4 overflow-y-auto">
+                    {/* Main */}
+                    <NavGroupLabel label="Main" />
+                    <div className="space-y-1 mb-3">
+                        <NavItem
+                            icon={<LayoutDashboard size={20} />}
+                            label="Overview"
+                            active={activeTab === 'overview' || activeTab === 'group-detail'}
+                            onClick={() => onTabChange?.('overview')}
+                        />
+                        <NavItem
+                            icon={<TerminalSquare size={20} />}
+                            label="Logs"
+                            active={activeTab === 'logs'}
+                            onClick={() => onTabChange?.('logs')}
+                        />
+                    </div>
+
+                    {/* Management */}
+                    <NavGroupLabel label="Management" />
+                    <div className="space-y-1 mb-3">
+                        <NavItem
+                            icon={<Database size={20} />}
+                            label="Memory"
+                            active={activeTab === 'memory'}
+                            onClick={() => onTabChange?.('memory')}
+                        />
+                        <NavItem
+                            icon={<BookOpen size={20} />}
+                            label="Knowledge"
+                            active={activeTab === 'knowledge'}
+                            onClick={() => onTabChange?.('knowledge')}
+                        />
+                        <NavItem
+                            icon={<CalendarClock size={20} />}
+                            label="Tasks"
+                            active={activeTab === 'tasks'}
+                            onClick={() => onTabChange?.('tasks')}
+                        />
+                        <NavItem
+                            icon={<Calendar size={20} />}
+                            label="Calendar"
+                            active={activeTab === 'calendar'}
+                            onClick={() => onTabChange?.('calendar')}
+                        />
+                    </div>
+
+                    {/* Monitoring */}
+                    <NavGroupLabel label="Monitoring" />
+                    <div className="space-y-1 mb-3">
+                        <NavItem
+                            icon={<BarChart3 size={20} />}
+                            label="Analytics"
+                            active={activeTab === 'analytics'}
+                            onClick={() => onTabChange?.('analytics')}
+                        />
+                    </div>
+
+                    {/* System */}
+                    <NavGroupLabel label="System" />
+                    <div className="space-y-1">
+                        <NavItem
+                            icon={<Settings size={20} />}
+                            label="Settings"
+                            active={activeTab === 'settings'}
+                            onClick={() => onTabChange?.('settings')}
+                        />
+                    </div>
                 </nav>
 
                 <div className="p-4 border-t border-slate-800 hidden lg:block">
@@ -81,6 +107,17 @@ export function DashboardLayout({ children, activeTab = 'overview', onTabChange 
                         <p className="text-slate-400 text-sm mt-1">Real-time Command Center</p>
                     </div>
                     <div className="flex items-center gap-3">
+                        {onSearchOpen && (
+                            <button
+                                onClick={onSearchOpen}
+                                className="flex items-center gap-2 px-3 py-1.5 bg-slate-800 border border-slate-700 rounded-lg text-slate-400 text-xs font-mono hover:bg-slate-700 hover:text-slate-300 transition-colors"
+                                title="Search (Cmd+K)"
+                            >
+                                <Search size={14} />
+                                <span className="hidden lg:inline">Search</span>
+                                <kbd className="hidden lg:inline ml-1 px-1.5 py-0.5 bg-slate-900 rounded text-[10px] border border-slate-700">⌘K</kbd>
+                            </button>
+                        )}
                         <div className="flex items-center gap-2 px-3 py-1.5 bg-green-500/10 border border-green-500/20 rounded-full text-green-400 text-xs font-mono">
                             <div className="w-2 h-2 bg-green-500 rounded-full animate-pulse" />
                             ONLINE
@@ -90,6 +127,14 @@ export function DashboardLayout({ children, activeTab = 'overview', onTabChange 
 
                 {children}
             </main>
+        </div>
+    );
+}
+
+function NavGroupLabel({ label }: { label: string }) {
+    return (
+        <div className="hidden lg:block text-[10px] text-slate-600 uppercase tracking-widest font-semibold px-3 mb-1 mt-1">
+            {label}
         </div>
     );
 }

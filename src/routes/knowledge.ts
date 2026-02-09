@@ -23,8 +23,8 @@ export function createKnowledgeRouter(deps: KnowledgeRouterDeps): Router {
             const db = getDatabase();
             const docs = getKnowledgeDocs(db, folder);
             res.json({ data: docs });
-        } catch (err: any) {
-            res.status(500).json({ error: err.message });
+        } catch {
+            res.status(500).json({ error: 'Failed to fetch knowledge documents' });
         }
     });
 
@@ -53,8 +53,8 @@ export function createKnowledgeRouter(deps: KnowledgeRouterDeps): Router {
             const db = getDatabase();
             const doc = addKnowledgeDoc(db, folder, filename, title, content);
             res.json({ data: doc });
-        } catch (err: any) {
-            res.status(500).json({ error: err.message });
+        } catch {
+            res.status(500).json({ error: 'Failed to create knowledge document' });
         }
     });
 
@@ -78,8 +78,8 @@ export function createKnowledgeRouter(deps: KnowledgeRouterDeps): Router {
             const db = getDatabase();
             const results = searchKnowledge(db, q, folder);
             res.json({ data: results });
-        } catch (err: any) {
-            res.status(500).json({ error: err.message });
+        } catch {
+            res.status(500).json({ error: 'Knowledge search failed' });
         }
     });
 
@@ -107,8 +107,8 @@ export function createKnowledgeRouter(deps: KnowledgeRouterDeps): Router {
                 return;
             }
             res.json({ data: doc });
-        } catch (err: any) {
-            res.status(500).json({ error: err.message });
+        } catch {
+            res.status(500).json({ error: 'Failed to fetch document' });
         }
     });
 
@@ -143,8 +143,8 @@ export function createKnowledgeRouter(deps: KnowledgeRouterDeps): Router {
             }
             const updated = updateKnowledgeDoc(db, docIdNum, title, content);
             res.json({ data: updated });
-        } catch (err: any) {
-            res.status(500).json({ error: err.message });
+        } catch {
+            res.status(500).json({ error: 'Failed to update document' });
         }
     });
 
@@ -173,8 +173,8 @@ export function createKnowledgeRouter(deps: KnowledgeRouterDeps): Router {
             }
             deleteKnowledgeDoc(db, docIdNum);
             res.json({ data: { success: true } });
-        } catch (err: any) {
-            res.status(500).json({ error: err.message });
+        } catch {
+            res.status(500).json({ error: 'Failed to delete document' });
         }
     });
 

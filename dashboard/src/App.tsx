@@ -4,10 +4,15 @@ import { StatusCard } from './components/StatusCard';
 import { Terminal } from './components/Terminal';
 import { MemoryEditor } from './components/MemoryEditor';
 import { LoginScreen } from './components/LoginScreen';
-import { SettingsParams } from './components/SettingsParams';
+import { SettingsPage } from './pages/SettingsPage';
+import { GroupDetailPage } from './pages/GroupDetailPage';
 import { TasksPage } from './pages/TasksPage';
 import { AnalyticsPage } from './pages/AnalyticsPage';
 import { KnowledgePage } from './pages/KnowledgePage';
+import { CalendarPage } from './pages/CalendarPage';
+import { ErrorBoundary } from './components/ErrorBoundary';
+import { ToastContainer } from './components/ToastContainer';
+import { SearchOverlay } from './components/SearchOverlay';
 import { Search, Loader2, Bot, ChevronRight } from 'lucide-react';
 import { useSocket } from './hooks/useSocket';
 import { useApiQuery } from './hooks/useApi';
@@ -16,6 +21,20 @@ function App() {
     const { groups, logs, isConnected } = useSocket();
     const [activeTab, setActiveTab] = useState('overview');
     const [selectedGroupForMemory, setSelectedGroupForMemory] = useState<string | null>(null);
+    const [selectedGroup, setSelectedGroup] = useState<string | null>(null);
+    const [searchOpen, setSearchOpen] = useState(false);
+
+    // Cmd+K global shortcut
+    useEffect(() => {
+        const handleKeyDown = (e: KeyboardEvent) => {
+            if ((e.metaKey || e.ctrlKey) && e.key === 'k') {
+                e.preventDefault();
+                setSearchOpen(prev => !prev);
+            }
+        };
+        window.addEventListener('keydown', handleKeyDown);
+        return () => window.removeEventListener('keydown', handleKeyDown);
+    }, []);
 
     // Auth State
     const { data: config } = useApiQuery<{ authRequired: boolean }>('/api/config');
@@ -27,20 +46,23 @@ function App() {
         if (stored) setIsAuthenticated(true);
     }, []);
 
+    // Auto-select first group for memory view if none selected
+    useEffect(() => {
+        if (activeTab === 'memory' && !selectedGroupForMemory && groups.length > 0) {
+            setSelectedGroupForMemory(groups[0].id);
+        }
+    }, [activeTab, selectedGroupForMemory, groups]);
+
     if (config?.authRequired && !isAuthenticated) {
         return <LoginScreen onSuccess={() => setIsAuthenticated(true)} />;
     }
 
-    // Auto-select first group for memory view if none selected
-    if (activeTab === 'memory' && !selectedGroupForMemory && groups.length > 0) {
-        setSelectedGroupForMemory(groups[0].id);
-    }
-
     return (
-        <DashboardLayout activeTab={activeTab} onTabChange={setActiveTab}>
-
-            {/* OVERVIEW TAB */}
-            {activeTab === 'overview' && (
+        <>
+            <DashboardLayout activeTab={activeTab} onTabChange={setActiveTab} onSearchOpen={() => setSearchOpen(true)}>
+                <ErrorBoundary>
+                    {/* OVERVIEW TAB */}
+                    {activeTab === 'overview' && (
                 <>
                     {/* Filters & Actions */}
                     <div className="flex gap-4 mb-6">
@@ -89,6 +111,10 @@ function App() {
                                     onViewMemory={() => {
                                         setSelectedGroupForMemory(group.id);
                                         setActiveTab('memory');
+                                    }}
+                                    onClick={() => {
+                                        setSelectedGroup(group.id);
+                                        setActiveTab('group-detail');
                                     }}
                                 />
                             ))}
@@ -159,8 +185,16 @@ function App() {
                 </div>
             )}
 
+            {/* GROUP DETAIL TAB */}
+            {activeTab === 'group-detail' && selectedGroup && (
+                <GroupDetailPage
+                    groupFolder={selectedGroup}
+                    onBack={() => setActiveTab('overview')}
+                />
+            )}
+
             {/* SETTINGS TAB */}
-            {activeTab === 'settings' && <SettingsParams />}
+            {activeTab === 'settings' && <SettingsPage />}
 
             {/* TASKS AND ANALYTICS TABS */}
             {activeTab === 'tasks' && <TasksPage />}
@@ -169,7 +203,14 @@ function App() {
             {/* KNOWLEDGE TAB */}
             {activeTab === 'knowledge' && <KnowledgePage />}
 
-        </DashboardLayout>
+            {/* CALENDAR TAB */}
+            {activeTab === 'calendar' && <CalendarPage />}
+
+                </ErrorBoundary>
+            </DashboardLayout>
+            <SearchOverlay isOpen={searchOpen} onClose={() => setSearchOpen(false)} />
+            <ToastContainer />
+        </>
     );
 }
 

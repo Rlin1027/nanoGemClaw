@@ -1,4 +1,5 @@
-import { useApiQuery, useApiMutation } from './useApi';
+import { useState, useCallback, useRef } from 'react';
+import { useApiQuery, useApiMutation, apiFetch } from './useApi';
 
 export interface KnowledgeDoc {
     id: number;
@@ -34,4 +35,49 @@ export function useDeleteKnowledgeDoc(groupFolder: string, docId: number) {
         `/api/groups/${groupFolder}/knowledge/${docId}`,
         'DELETE'
     );
+}
+
+export interface KnowledgeSearchResult {
+    id: number;
+    title: string;
+    filename: string;
+    snippet: string;
+    rank: number;
+}
+
+export function useKnowledgeSearch(groupFolder: string) {
+    const [results, setResults] = useState<KnowledgeSearchResult[]>([]);
+    const [isSearching, setIsSearching] = useState(false);
+    const debounceRef = useRef<ReturnType<typeof setTimeout>>();
+
+    const search = useCallback((query: string) => {
+        if (debounceRef.current) clearTimeout(debounceRef.current);
+
+        if (!query || query.length < 3 || !groupFolder) {
+            setResults([]);
+            setIsSearching(false);
+            return;
+        }
+
+        setIsSearching(true);
+        debounceRef.current = setTimeout(async () => {
+            try {
+                const data = await apiFetch<KnowledgeSearchResult[]>(
+                    `/api/groups/${groupFolder}/knowledge/search?q=${encodeURIComponent(query)}`
+                );
+                setResults(data);
+            } catch {
+                setResults([]);
+            } finally {
+                setIsSearching(false);
+            }
+        }, 300);
+    }, [groupFolder]);
+
+    const clearSearch = useCallback(() => {
+        setResults([]);
+        setIsSearching(false);
+    }, []);
+
+    return { results, isSearching, search, clearSearch };
 }

@@ -5,14 +5,24 @@ import { GROUPS_DIR } from '../config.js';
 
 const SAFE_FOLDER_RE = /^[a-zA-Z0-9_-]+$/;
 
+interface RegisteredGroup {
+    id: string;
+    folder: string;
+    name: string;
+    persona?: string;
+    enableWebSearch?: boolean;
+    requireTrigger?: boolean;
+    geminiModel?: string;
+}
+
 interface GroupsRouterDeps {
-    groupsProvider: () => any[];
-    groupRegistrar: ((chatId: string, name: string) => any) | null;
-    groupUpdater: ((folder: string, updates: Record<string, any>) => any) | null;
+    groupsProvider: () => RegisteredGroup[];
+    groupRegistrar: ((chatId: string, name: string) => RegisteredGroup) | null;
+    groupUpdater: ((folder: string, updates: Record<string, unknown>) => RegisteredGroup | null) | null;
     chatJidResolver: ((folder: string) => string | null) | null;
     validateFolder: (folder: string) => boolean;
     validateNumericParam: (value: string, name: string) => number | null;
-    emitDashboardEvent: (event: string, data: any) => void;
+    emitDashboardEvent: (event: string, data: unknown) => void;
 }
 
 export function createGroupsRouter(deps: GroupsRouterDeps): Router {
@@ -28,7 +38,7 @@ export function createGroupsRouter(deps: GroupsRouterDeps): Router {
     // GET /api/groups
     router.get('/groups', (_req, res) => {
         const groups = deps.groupsProvider ? deps.groupsProvider() : [];
-        res.json({ groups });
+        res.json({ data: groups });
     });
 
     // GET /api/groups/discover
@@ -37,7 +47,7 @@ export function createGroupsRouter(deps: GroupsRouterDeps): Router {
             const { getAllChats } = await import('../db.js');
             const chats = getAllChats();
             res.json({ data: chats });
-        } catch (err) {
+        } catch {
             res.status(500).json({ error: 'Failed to discover groups' });
         }
     });
@@ -66,7 +76,7 @@ export function createGroupsRouter(deps: GroupsRouterDeps): Router {
             // Broadcast updated groups to all dashboard clients
             emitDashboardEvent('groups:update', deps.groupsProvider());
             res.json({ data: result });
-        } catch (err) {
+        } catch {
             res.status(500).json({ error: 'Registration failed' });
         }
     });
@@ -83,7 +93,7 @@ export function createGroupsRouter(deps: GroupsRouterDeps): Router {
                 await import('../db.js');
             const groups = deps.groupsProvider();
             const group = groups.find(
-                (g: any) => g.id === folder || g.folder === folder,
+                (g) => g.id === folder || g.folder === folder,
             );
             if (!group) {
                 res.status(404).json({ error: 'Group not found' });
@@ -101,7 +111,7 @@ export function createGroupsRouter(deps: GroupsRouterDeps): Router {
                     errorState,
                 },
             });
-        } catch (err) {
+        } catch {
             res.status(500).json({ error: 'Failed to fetch group detail' });
         }
     });
@@ -139,7 +149,7 @@ export function createGroupsRouter(deps: GroupsRouterDeps): Router {
             }
         }
 
-        const updates: Record<string, any> = {};
+        const updates: Record<string, unknown> = {};
         if (persona !== undefined) updates.persona = persona;
         if (enableWebSearch !== undefined)
             updates.enableWebSearch = enableWebSearch;
@@ -157,7 +167,7 @@ export function createGroupsRouter(deps: GroupsRouterDeps): Router {
             // Broadcast update to all dashboard clients
             emitDashboardEvent('groups:update', deps.groupsProvider());
             res.json({ data: result });
-        } catch (err) {
+        } catch {
             res.status(500).json({ error: 'Failed to update group' });
         }
     });
@@ -291,7 +301,7 @@ export function createGroupsRouter(deps: GroupsRouterDeps): Router {
             } else {
                 res.json({ data: exportData });
             }
-        } catch (err) {
+        } catch {
             res.status(500).json({ error: 'Failed to export conversation' });
         }
     });
@@ -404,8 +414,8 @@ export function createGroupsRouter(deps: GroupsRouterDeps): Router {
             const db = getDatabase();
             const results = searchMessages(db, q, { group, limit, offset });
             res.json({ data: results });
-        } catch (err: any) {
-            res.status(500).json({ error: err.message });
+        } catch {
+            res.status(500).json({ error: 'Search failed' });
         }
     });
 

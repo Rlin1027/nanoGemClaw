@@ -1,6 +1,6 @@
 import { useState, useEffect, useCallback } from 'react';
 
-const API_BASE = 'http://localhost:3000';
+const API_BASE = import.meta.env.VITE_API_URL || window.location.origin;
 
 export async function apiFetch<T>(
     url: string,
@@ -35,10 +35,8 @@ export function useApiQuery<T>(endpoint: string): UseApiQueryResult<T> {
     const fetchData = useCallback(async () => {
         setIsLoading(true);
         try {
-            const res = await fetch(`${API_BASE}${endpoint}`);
-            if (!res.ok) throw new Error(`API Error: ${res.statusText}`);
-            const json = await res.json();
-            setData(json.data ?? json); // Support { data: ... } or raw json
+            const result = await apiFetch<T>(endpoint);
+            setData(result);
             setError(null);
         } catch (err) {
             setError(err instanceof Error ? err : new Error('Unknown error'));

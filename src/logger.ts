@@ -51,11 +51,12 @@ function formatData(data: unknown): string {
 }
 
 function addToBuffer(entry: LogEntry): void {
-  logBuffer.push(entry);
+  const maskedEntry = { ...entry, data: maskSensitiveData(entry.data) };
+  logBuffer.push(maskedEntry);
   if (logBuffer.length > MAX_BUFFER_SIZE) {
     logBuffer.shift();
   }
-  logEmitter.emit('log', entry);
+  logEmitter.emit('log', maskedEntry);
 }
 
 export function getLogBuffer(): LogEntry[] {

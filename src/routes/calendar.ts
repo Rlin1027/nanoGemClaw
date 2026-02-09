@@ -15,8 +15,8 @@ export function createCalendarRouter(deps: CalendarRouterDeps): Router {
             const { getCalendarConfigs } = await import('../google-calendar.js');
             const configs = getCalendarConfigs();
             res.json({ data: configs });
-        } catch (err: any) {
-            res.status(500).json({ error: err.message });
+        } catch {
+            res.status(500).json({ error: 'Failed to fetch calendar configs' });
         }
     });
 
@@ -31,8 +31,8 @@ export function createCalendarRouter(deps: CalendarRouterDeps): Router {
             const { saveCalendarConfig } = await import('../google-calendar.js');
             saveCalendarConfig({ url, name });
             res.json({ data: { success: true } });
-        } catch (err: any) {
-            res.status(500).json({ error: err.message });
+        } catch {
+            res.status(500).json({ error: 'Failed to save calendar config' });
         }
     });
 
@@ -47,8 +47,8 @@ export function createCalendarRouter(deps: CalendarRouterDeps): Router {
             const { removeCalendarConfig } = await import('../google-calendar.js');
             const removed = removeCalendarConfig(url);
             res.json({ data: { removed } });
-        } catch (err: any) {
-            res.status(500).json({ error: err.message });
+        } catch {
+            res.status(500).json({ error: 'Failed to remove calendar config' });
         }
     });
 
@@ -83,8 +83,8 @@ export function createCalendarRouter(deps: CalendarRouterDeps): Router {
             allEvents.sort((a, b) => a.start.getTime() - b.start.getTime());
 
             res.json({ data: allEvents });
-        } catch (err: any) {
-            res.status(500).json({ error: err.message });
+        } catch {
+            res.status(500).json({ error: 'Failed to fetch calendar events' });
         }
     });
 

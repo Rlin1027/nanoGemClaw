@@ -256,6 +256,9 @@ export function searchKnowledge(
   groupFolder: string,
   limit = 10,
 ): KnowledgeSearchResult[] {
+  // Sanitize FTS5 query - wrap in quotes to treat as literal phrase
+  const sanitizedQuery = `"${query.replace(/"/g, '""')}"`;
+
   const results = db.prepare(`
     SELECT
       d.id,
@@ -269,7 +272,7 @@ export function searchKnowledge(
     WHERE fts.group_folder = ? AND knowledge_fts MATCH ?
     ORDER BY fts.rank
     LIMIT ?
-  `).all(groupFolder, query, limit) as KnowledgeSearchResult[];
+  `).all(groupFolder, sanitizedQuery, limit) as KnowledgeSearchResult[];
 
   return results;
 }
@@ -284,7 +287,19 @@ export function getRelevantKnowledge(
   groupFolder: string,
   maxChars = 50000,
 ): string {
-  const results = searchKnowledge(db, query, groupFolder, 20);
+  const sanitizedQuery = `"${query.replace(/"/g, '""')}"`;
+
+  // Single query: JOIN full document content with FTS results
+  const results = db.prepare(`
+    SELECT
+      d.title,
+      d.content
+    FROM knowledge_fts fts
+    JOIN knowledge_docs d ON d.id = fts.doc_id
+    WHERE fts.group_folder = ? AND knowledge_fts MATCH ?
+    ORDER BY fts.rank
+    LIMIT 20
+  `).all(groupFolder, sanitizedQuery) as Array<{ title: string; content: string }>;
 
   if (results.length === 0) {
     return '';
@@ -293,16 +308,11 @@ export function getRelevantKnowledge(
   const chunks: string[] = [];
   let totalChars = 0;
 
-  for (const result of results) {
-    // Get full document content
-    const doc = getKnowledgeDoc(db, result.id);
-    if (!doc) continue;
-
+  for (const doc of results) {
     const header = `\n# ${doc.title}\n\n`;
     const chunkSize = header.length + doc.content.length;
 
     if (totalChars + chunkSize > maxChars) {
-      // Try to fit partial content
       const remaining = maxChars - totalChars - header.length;
       if (remaining > 200) {
         chunks.push(header + doc.content.substring(0, remaining) + '\n...');

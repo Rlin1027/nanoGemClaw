@@ -86,7 +86,6 @@ export function createConfigRouter(deps: ConfigRouterDeps): Router {
             return {
                 key,
                 configured: !!value,
-                masked: value ? '***' + value.slice(-4) : null,
             };
         });
 

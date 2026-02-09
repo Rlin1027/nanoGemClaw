@@ -105,13 +105,37 @@ export function TaskFormModal({ groups, defaultGroup, onClose, onCreated }: Task
                             {form.schedule_type === 'cron' ? 'Cron Expression' :
                              form.schedule_type === 'interval' ? 'Interval (ms)' : 'Run At (ISO)'}
                         </label>
+                        {form.schedule_type === 'cron' && (
+                            <div className="flex gap-1.5 mb-2 flex-wrap">
+                                {([
+                                    ['Every 5 min', '*/5 * * * *'],
+                                    ['Every hour', '0 * * * *'],
+                                    ['Daily 9am', '0 9 * * *'],
+                                    ['Every Monday', '0 9 * * 1'],
+                                ] as const).map(([label, value]) => (
+                                    <button
+                                        key={value}
+                                        type="button"
+                                        onClick={() => setForm(f => ({ ...f, schedule_value: value }))}
+                                        className={cn(
+                                            "px-2 py-1 rounded text-xs font-medium transition-colors",
+                                            form.schedule_value === value
+                                                ? "bg-blue-600/30 text-blue-300 border border-blue-500/30"
+                                                : "bg-slate-800/80 text-slate-500 hover:text-slate-300 border border-slate-700/50"
+                                        )}
+                                    >
+                                        {label}
+                                    </button>
+                                ))}
+                            </div>
+                        )}
                         <input
                             value={form.schedule_value}
                             onChange={e => setForm(f => ({ ...f, schedule_value: e.target.value }))}
                             required
                             className="w-full bg-slate-800 border border-slate-700 rounded-lg px-3 py-2 text-sm text-slate-200"
                             placeholder={
-                                form.schedule_type === 'cron' ? '0 9 * * *' :
+                                form.schedule_type === 'cron' ? '0 9 * * * (min hour day month weekday)' :
                                 form.schedule_type === 'interval' ? '3600000' : '2025-12-31T00:00:00Z'
                             }
                         />
