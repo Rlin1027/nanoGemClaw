@@ -122,8 +122,27 @@ export function initDatabase(): void {
     db.exec('PRAGMA user_version = 1');
   }
 
+  if (currentVersion < 2) {
+    // Migration v2: Knowledge base tables
+    db.exec(`
+      CREATE TABLE IF NOT EXISTS knowledge_docs (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        group_folder TEXT NOT NULL,
+        filename TEXT NOT NULL,
+        title TEXT NOT NULL,
+        content TEXT NOT NULL,
+        size_chars INTEGER NOT NULL,
+        created_at TEXT NOT NULL,
+        updated_at TEXT NOT NULL,
+        UNIQUE(group_folder, filename)
+      );
+      CREATE INDEX IF NOT EXISTS idx_knowledge_group ON knowledge_docs(group_folder);
+    `);
+    db.exec('PRAGMA user_version = 2');
+  }
+
   // Future migrations go here:
-  // if (currentVersion < 2) { ... db.exec('PRAGMA user_version = 2'); }
+  // if (currentVersion < 3) { ... db.exec('PRAGMA user_version = 3'); }
 }
 
 /**

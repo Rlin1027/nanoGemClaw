@@ -85,3 +85,25 @@ export interface TaskRunLog {
   result: string | null;
   error: string | null;
 }
+
+// ============================================================================
+// IPC Handler Plugin Interface
+// ============================================================================
+
+export interface IpcContext {
+  sourceGroup: string;
+  isMain: boolean;
+  registeredGroups: Record<string, RegisteredGroup>;
+  sendMessage: (chatJid: string, text: string) => Promise<void>;
+  registerGroup?: (chatId: string, group: RegisteredGroup) => void;
+  bot?: any; // TelegramBot instance for media sending
+}
+
+export interface IpcHandler {
+  /** IPC message type this handler processes (e.g. 'schedule_task') */
+  type: string;
+  /** Permission level required */
+  requiredPermission: 'main' | 'own_group' | 'any';
+  /** Process the IPC message */
+  handle(data: Record<string, any>, context: IpcContext): Promise<void>;
+}

@@ -18,7 +18,6 @@ import {
   STORE_DIR,
   TELEGRAM,
   TELEGRAM_BOT_TOKEN,
-  TIMEZONE,
   TRIGGER_PATTERN,
   GROUPS_DIR,
 } from './config.js';
@@ -114,6 +113,7 @@ function registerGroup(chatId: string, group: RegisteredGroup): void {
   const groupDir = path.join(GROUPS_DIR, group.folder);
   fs.mkdirSync(path.join(groupDir, 'logs'), { recursive: true });
   fs.mkdirSync(path.join(groupDir, 'media'), { recursive: true });
+  fs.mkdirSync(path.join(groupDir, 'knowledge'), { recursive: true });
 
   logger.info(
     { chatId, name: group.name, folder: group.folder },
@@ -1277,235 +1277,22 @@ function startIpcWatcher(): void {
 }
 
 async function processTaskIpc(
-  data: {
-    type: string;
-    taskId?: string;
-    prompt?: string;
-    schedule_type?: string;
-    schedule_value?: string;
-    context_mode?: string;
-    groupFolder?: string;
-    chatJid?: string;
-    jid?: string;
-    name?: string;
-    folder?: string;
-    trigger?: string;
-    containerConfig?: RegisteredGroup['containerConfig'];
-  },
+  data: Record<string, any>,
   sourceGroup: string,
   isMain: boolean,
 ): Promise<void> {
-  const {
-    createTask,
-    updateTask,
-    deleteTask,
-    getTaskById: getTask,
-  } = await import('./db.js');
-  const { CronExpressionParser } = await import('cron-parser');
+  const { dispatchIpc } = await import('./ipc-handlers/index.js');
 
-  switch (data.type) {
-    case 'schedule_task':
-      if (
-        data.prompt &&
-        data.schedule_type &&
-        data.schedule_value &&
-        data.groupFolder
-      ) {
-        const targetGroup = data.groupFolder;
-        if (!isMain && targetGroup !== sourceGroup) {
-          logger.warn(
-            { sourceGroup, targetGroup },
-            'Unauthorized schedule_task attempt blocked',
-          );
-          break;
-        }
+  const context: import('./types.js').IpcContext = {
+    sourceGroup,
+    isMain,
+    registeredGroups,
+    sendMessage,
+    registerGroup,
+    bot,
+  };
 
-        const targetChatId = Object.entries(registeredGroups).find(
-          ([, group]) => group.folder === targetGroup,
-        )?.[0];
-
-        if (!targetChatId) {
-          logger.warn(
-            { targetGroup },
-            'Cannot schedule task: target group not registered',
-          );
-          break;
-        }
-
-        const scheduleType = data.schedule_type as 'cron' | 'interval' | 'once';
-
-        let nextRun: string | null = null;
-        if (scheduleType === 'cron') {
-          try {
-            const interval = CronExpressionParser.parse(data.schedule_value, {
-              tz: TIMEZONE,
-            });
-            nextRun = interval.next().toISOString();
-          } catch {
-            logger.warn(
-              { scheduleValue: data.schedule_value },
-              'Invalid cron expression',
-            );
-            break;
-          }
-        } else if (scheduleType === 'interval') {
-          const ms = parseInt(data.schedule_value, 10);
-          if (isNaN(ms) || ms <= 0) {
-            logger.warn(
-              { scheduleValue: data.schedule_value },
-              'Invalid interval',
-            );
-            break;
-          }
-          nextRun = new Date(Date.now() + ms).toISOString();
-        } else if (scheduleType === 'once') {
-          const scheduled = new Date(data.schedule_value);
-          if (isNaN(scheduled.getTime())) {
-            logger.warn(
-              { scheduleValue: data.schedule_value },
-              'Invalid timestamp',
-            );
-            break;
-          }
-          nextRun = scheduled.toISOString();
-        }
-
-        const taskId = `task-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
-        const contextMode =
-          data.context_mode === 'group' || data.context_mode === 'isolated'
-            ? data.context_mode
-            : 'isolated';
-        createTask({
-          id: taskId,
-          group_folder: targetGroup,
-          chat_jid: targetChatId,
-          prompt: data.prompt,
-          schedule_type: scheduleType,
-          schedule_value: data.schedule_value,
-          context_mode: contextMode,
-          next_run: nextRun,
-          status: 'active',
-          created_at: new Date().toISOString(),
-        });
-        logger.info(
-          { taskId, sourceGroup, targetGroup, contextMode },
-          'Task created via IPC',
-        );
-      }
-      break;
-
-    case 'pause_task':
-      if (data.taskId) {
-        const task = getTask(data.taskId);
-        if (task && (isMain || task.group_folder === sourceGroup)) {
-          updateTask(data.taskId, { status: 'paused' });
-          logger.info(
-            { taskId: data.taskId, sourceGroup },
-            'Task paused via IPC',
-          );
-        } else {
-          logger.warn(
-            { taskId: data.taskId, sourceGroup },
-            'Unauthorized task pause attempt',
-          );
-        }
-      }
-      break;
-
-    case 'resume_task':
-      if (data.taskId) {
-        const task = getTask(data.taskId);
-        if (task && (isMain || task.group_folder === sourceGroup)) {
-          updateTask(data.taskId, { status: 'active' });
-          logger.info(
-            { taskId: data.taskId, sourceGroup },
-            'Task resumed via IPC',
-          );
-        } else {
-          logger.warn(
-            { taskId: data.taskId, sourceGroup },
-            'Unauthorized task resume attempt',
-          );
-        }
-      }
-      break;
-
-    case 'cancel_task':
-      if (data.taskId) {
-        const task = getTask(data.taskId);
-        if (task && (isMain || task.group_folder === sourceGroup)) {
-          deleteTask(data.taskId);
-          logger.info(
-            { taskId: data.taskId, sourceGroup },
-            'Task cancelled via IPC',
-          );
-        } else {
-          logger.warn(
-            { taskId: data.taskId, sourceGroup },
-            'Unauthorized task cancel attempt',
-          );
-        }
-      }
-      break;
-
-    case 'register_group':
-      if (!isMain) {
-        logger.warn(
-          { sourceGroup },
-          'Unauthorized register_group attempt blocked',
-        );
-        break;
-      }
-      if (data.jid && data.name && data.folder && data.trigger) {
-        if (!/^[a-zA-Z0-9_-]+$/.test(data.folder)) {
-          logger.warn({ folder: data.folder }, 'Invalid folder name in register_group IPC');
-          break;
-        }
-        registerGroup(data.jid, {
-          name: data.name,
-          folder: data.folder,
-          trigger: data.trigger,
-          added_at: new Date().toISOString(),
-          containerConfig: data.containerConfig,
-        });
-      } else {
-        logger.warn(
-          { data },
-          'Invalid register_group request - missing required fields',
-        );
-      }
-      break;
-
-    case 'generate_image':
-      if (data.prompt && data.chatJid) {
-        const { generateImage } = await import('./image-gen.js');
-        const targetGroup = Object.entries(registeredGroups).find(
-          ([jid]) => jid === data.chatJid,
-        )?.[1];
-
-        if (!targetGroup) {
-          logger.warn({ chatJid: data.chatJid }, 'Cannot generate image: group not found');
-          break;
-        }
-
-        const outputDir = path.join(GROUPS_DIR, targetGroup.folder, 'media');
-        const result = await generateImage(data.prompt, outputDir);
-
-        if (result.success && result.imagePath) {
-          // Send the generated image to Telegram
-          await bot.sendPhoto(data.chatJid, result.imagePath, {
-            caption: `🎨 Generated: ${data.prompt.slice(0, 100)}`,
-          });
-          logger.info({ chatJid: data.chatJid, prompt: data.prompt.slice(0, 50) }, 'Image generated and sent');
-        } else {
-          await sendMessage(data.chatJid, `❌ Image generation failed: ${result.error}`);
-        }
-      }
-      break;
-
-    default:
-      logger.warn({ type: data.type }, 'Unknown IPC task type');
-  }
+  await dispatchIpc(data, context);
 }
 
 // ============================================================================
@@ -1712,12 +1499,20 @@ async function main(): Promise<void> {
   const dbInstance = getDatabase();
   initSearchIndex(dbInstance);
 
+  // Initialize knowledge base index
+  const { initKnowledgeIndex } = await import('./knowledge.js');
+  initKnowledgeIndex(dbInstance);
+
   await loadState();
   loadMaintenanceState();
 
   // Load custom personas
   const { loadCustomPersonas } = await import('./personas.js');
   loadCustomPersonas();
+
+  // Load IPC handlers
+  const { loadBuiltinHandlers } = await import('./ipc-handlers/index.js');
+  await loadBuiltinHandlers();
 
   // Start health check server
   const { setHealthCheckDependencies, startHealthCheckServer } = await import('./health-check.js');
@@ -1741,7 +1536,7 @@ async function main(): Promise<void> {
 
   // Start Dashboard Server (Phase 2)
   const { startDashboardServer, setGroupsProvider } = await import('./server.js');
-  const { getTaskById, getTasksForGroup, getAllTasks, getErrorState, getGroupMessageStats } = await import('./db.js');
+  const { getTasksForGroup, getErrorState, getGroupMessageStats } = await import('./db.js');
 
   startDashboardServer();
 

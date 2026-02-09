@@ -749,6 +749,154 @@ export function startDashboardServer() {
   });
 
   // ================================================================
+  // REST API: Knowledge Base
+  // ================================================================
+  app.get('/api/groups/:folder/knowledge', async (req, res) => {
+    const { folder } = req.params;
+    if (!validateFolder(folder)) {
+      res.status(400).json({ error: 'Invalid folder' });
+      return;
+    }
+
+    try {
+      const { getKnowledgeDocs } = await import('./knowledge.js');
+      const { getDatabase } = await import('./db.js');
+      const db = getDatabase();
+      const docs = getKnowledgeDocs(db, folder);
+      res.json({ data: docs });
+    } catch (err: any) {
+      res.status(500).json({ error: err.message });
+    }
+  });
+
+  app.post('/api/groups/:folder/knowledge', async (req, res) => {
+    const { folder } = req.params;
+    if (!validateFolder(folder)) {
+      res.status(400).json({ error: 'Invalid folder' });
+      return;
+    }
+
+    const { filename, title, content } = req.body;
+    if (!filename || !title || typeof content !== 'string') {
+      res.status(400).json({ error: 'Missing or invalid fields: filename, title, content required' });
+      return;
+    }
+
+    if (!/^[a-zA-Z0-9_-]+\.md$/.test(filename)) {
+      res.status(400).json({ error: 'Invalid filename: must match [a-zA-Z0-9_-]+.md' });
+      return;
+    }
+
+    try {
+      const { addKnowledgeDoc } = await import('./knowledge.js');
+      const { getDatabase } = await import('./db.js');
+      const db = getDatabase();
+      const doc = addKnowledgeDoc(db, folder, filename, title, content);
+      res.json({ data: doc });
+    } catch (err: any) {
+      res.status(500).json({ error: err.message });
+    }
+  });
+
+  app.get('/api/groups/:folder/knowledge/search', async (req, res) => {
+    const { folder } = req.params;
+    const { q } = req.query;
+    if (!validateFolder(folder)) {
+      res.status(400).json({ error: 'Invalid folder' });
+      return;
+    }
+
+    if (!q || typeof q !== 'string') {
+      res.status(400).json({ error: 'Missing or invalid query parameter: q' });
+      return;
+    }
+
+    try {
+      const { searchKnowledge } = await import('./knowledge.js');
+      const { getDatabase } = await import('./db.js');
+      const db = getDatabase();
+      const results = searchKnowledge(db, q, folder);
+      res.json({ data: results });
+    } catch (err: any) {
+      res.status(500).json({ error: err.message });
+    }
+  });
+
+  app.get('/api/groups/:folder/knowledge/:docId', async (req, res) => {
+    const { folder, docId } = req.params;
+    if (!validateFolder(folder)) {
+      res.status(400).json({ error: 'Invalid folder' });
+      return;
+    }
+
+    try {
+      const { getKnowledgeDoc } = await import('./knowledge.js');
+      const { getDatabase } = await import('./db.js');
+      const db = getDatabase();
+      const doc = getKnowledgeDoc(db, parseInt(docId, 10));
+      if (!doc || doc.group_folder !== folder) {
+        res.status(404).json({ error: 'Document not found' });
+        return;
+      }
+      res.json({ data: doc });
+    } catch (err: any) {
+      res.status(500).json({ error: err.message });
+    }
+  });
+
+  app.put('/api/groups/:folder/knowledge/:docId', async (req, res) => {
+    const { folder, docId } = req.params;
+    const { title, content } = req.body;
+    if (!validateFolder(folder)) {
+      res.status(400).json({ error: 'Invalid folder' });
+      return;
+    }
+
+    if (!title || typeof content !== 'string') {
+      res.status(400).json({ error: 'Missing or invalid fields: title, content required' });
+      return;
+    }
+
+    try {
+      const { getKnowledgeDoc, updateKnowledgeDoc } = await import('./knowledge.js');
+      const { getDatabase } = await import('./db.js');
+      const db = getDatabase();
+      const doc = getKnowledgeDoc(db, parseInt(docId, 10));
+      if (!doc || doc.group_folder !== folder) {
+        res.status(404).json({ error: 'Document not found' });
+        return;
+      }
+      const updated = updateKnowledgeDoc(db, parseInt(docId, 10), title, content);
+      res.json({ data: updated });
+    } catch (err: any) {
+      res.status(500).json({ error: err.message });
+    }
+  });
+
+  app.delete('/api/groups/:folder/knowledge/:docId', async (req, res) => {
+    const { folder, docId } = req.params;
+    if (!validateFolder(folder)) {
+      res.status(400).json({ error: 'Invalid folder' });
+      return;
+    }
+
+    try {
+      const { getKnowledgeDoc, deleteKnowledgeDoc } = await import('./knowledge.js');
+      const { getDatabase } = await import('./db.js');
+      const db = getDatabase();
+      const doc = getKnowledgeDoc(db, parseInt(docId, 10));
+      if (!doc || doc.group_folder !== folder) {
+        res.status(404).json({ error: 'Document not found' });
+        return;
+      }
+      deleteKnowledgeDoc(db, parseInt(docId, 10));
+      res.json({ data: { success: true } });
+    } catch (err: any) {
+      res.status(500).json({ error: err.message });
+    }
+  });
+
+  // ================================================================
   // REST API: Conversation Export
   // ================================================================
   app.get('/api/groups/:folder/export', async (req, res) => {

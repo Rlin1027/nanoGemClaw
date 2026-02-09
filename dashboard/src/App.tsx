@@ -7,6 +7,7 @@ import { LoginScreen } from './components/LoginScreen';
 import { SettingsParams } from './components/SettingsParams';
 import { TasksPage } from './pages/TasksPage';
 import { AnalyticsPage } from './pages/AnalyticsPage';
+import { KnowledgePage } from './pages/KnowledgePage';
 import { Search, Loader2, Bot, ChevronRight } from 'lucide-react';
 import { useSocket } from './hooks/useSocket';
 import { useApiQuery } from './hooks/useApi';
@@ -164,6 +165,9 @@ function App() {
             {/* TASKS AND ANALYTICS TABS */}
             {activeTab === 'tasks' && <TasksPage />}
             {activeTab === 'analytics' && <AnalyticsPage />}
+
+            {/* KNOWLEDGE TAB */}
+            {activeTab === 'knowledge' && <KnowledgePage />}
 
         </DashboardLayout>
     );

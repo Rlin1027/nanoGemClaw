@@ -365,6 +365,34 @@ function buildSystemContext(input: ContainerInput): string {
     }
   }
 
+  // Inject knowledge base file listing
+  let knowledgeInfo = '';
+  const knowledgeDir = '/workspace/group/knowledge';
+  if (fs.existsSync(knowledgeDir)) {
+    try {
+      const files = fs.readdirSync(knowledgeDir)
+        .filter(f => f.endsWith('.md'))
+        .map(f => {
+          const stat = fs.statSync(path.join(knowledgeDir, f));
+          return { name: f, size: stat.size };
+        });
+
+      if (files.length > 0) {
+        const totalSize = files.reduce((sum, f) => sum + f.size, 0);
+        const fileList = files.map(f => `  - ${f.name} (${Math.round(f.size / 1024)}KB)`).join('\n');
+        knowledgeInfo = `\n\n## Knowledge Base
+You have access to ${files.length} knowledge documents (total: ${Math.round(totalSize / 1024)}KB).
+Available files:
+${fileList}
+
+To read a knowledge document, use the shell: cat /workspace/group/knowledge/<filename>
+IMPORTANT: When a user asks a question, check if any knowledge documents might be relevant and read them first before answering.`;
+      }
+    } catch (err) {
+      log(`Failed to read knowledge directory: ${err instanceof Error ? err.message : String(err)}`);
+    }
+  }
+
   return `You are an AI assistant for NanoGemClaw. You are helping with the "${groupFolder}" group.
 
 IMPORTANT: To interact with the messaging system, you must write JSON files to specific directories:
@@ -402,7 +430,7 @@ Example: \`agent-browser open https://google.com && agent-browser snapshot -i\`
 Current context:
 - Group: ${groupFolder}
 - Chat JID: ${chatJid}
-- Is Main Group: ${isMain}${tasksInfo}${groupsInfo}${prefsInfo}${memoryContext}
+- Is Main Group: ${isMain}${tasksInfo}${groupsInfo}${prefsInfo}${knowledgeInfo}${memoryContext}
 
 When you need to send a message or manage tasks, use the shell to write JSON files to the appropriate IPC directory.
 Example: echo '{"type":"message","chatJid":"${chatJid}","text":"Hello!","timestamp":"'$(date -Iseconds)'"}' > /workspace/ipc/messages/$(date +%s)-msg.json`;

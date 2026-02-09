@@ -1,4 +1,4 @@
-import { LayoutDashboard, TerminalSquare, Settings, Database, Plus, CalendarClock, BarChart3 } from "lucide-react";
+import { LayoutDashboard, TerminalSquare, Settings, Database, Plus, CalendarClock, BarChart3, BookOpen } from "lucide-react";
 import { cn } from "@/lib/utils";
 
 interface DashboardLayoutProps {
@@ -39,6 +39,12 @@ export function DashboardLayout({ children, activeTab = 'overview', onTabChange 
                         label="Memory"
                         active={activeTab === 'memory'}
                         onClick={() => onTabChange?.('memory')}
+                    />
+                    <NavItem
+                        icon={<BookOpen size={20} />}
+                        label="Knowledge"
+                        active={activeTab === 'knowledge'}
+                        onClick={() => onTabChange?.('knowledge')}
                     />
                     <NavItem
                         icon={<CalendarClock size={20} />}
