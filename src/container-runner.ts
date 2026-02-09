@@ -132,6 +132,9 @@ export interface ProgressInfo {
   type: 'tool_use' | 'thinking' | 'message';
   toolName?: string;
   content?: string;
+  contentDelta?: string;    // 增量文字內容
+  contentSnapshot?: string; // 當前完整累積文字（供 editMessage 使用）
+  isComplete?: boolean;     // 回覆是否完成
 }
 
 interface VolumeMount {
@@ -385,10 +388,22 @@ async function runContainerAgentInternal(
 
   // Resolve system prompt with persona
   const { getEffectiveSystemPrompt } = await import('./personas.js');
-  const systemPrompt = getEffectiveSystemPrompt(
+  let systemPrompt = getEffectiveSystemPrompt(
     input.systemPrompt,
     input.persona,
   );
+
+  // Add follow-up suggestions instruction if enabled (default: on)
+  if ((group as any).enableFollowUp !== false) {
+    const followUpInstruction = `
+
+After your response, if there are natural follow-up questions the user might ask, suggest 2-3 of them on separate lines at the very end of your response, each prefixed with ">>>" (three greater-than signs). For example:
+>>> What are the other options?
+>>> Can you explain in more detail?
+>>> Show me an example
+Only suggest follow-ups when they genuinely add value. Do not suggest them for simple greetings or short answers.`;
+    systemPrompt = (systemPrompt || '') + followUpInstruction;
+  }
 
   // Build base args including mounts
   const baseArgs = buildContainerArgs(mounts);
@@ -457,6 +472,7 @@ async function runContainerAgentInternal(
 
     let lastProgressTime = 0;
     const PROGRESS_THROTTLE_MS = 2000;
+    let contentBuffer = ''; // Accumulate message content for streaming
 
     container.stdout.on('data', (data) => {
       if (stdoutTruncated) return;
@@ -482,20 +498,31 @@ async function runContainerAgentInternal(
           try {
             const event = JSON.parse(trimmed);
             const now = Date.now();
-            if (now - lastProgressTime < PROGRESS_THROTTLE_MS) continue;
 
             if (event.type === 'tool_use' && event.tool_name) {
-              lastProgressTime = now;
-              onProgress({
-                type: 'tool_use',
-                toolName: event.tool_name,
-              });
+              if (now - lastProgressTime >= PROGRESS_THROTTLE_MS) {
+                lastProgressTime = now;
+                onProgress({
+                  type: 'tool_use',
+                  toolName: event.tool_name,
+                });
+              }
             } else if (event.type === 'message' && event.content) {
-              lastProgressTime = now;
-              onProgress({
-                type: 'message',
-                content: event.content.substring(0, 100),
-              });
+              // Accumulate content for streaming
+              const delta = event.content.substring(contentBuffer.length);
+              contentBuffer = event.content;
+
+              // Only send progress updates respecting throttle
+              if (now - lastProgressTime >= PROGRESS_THROTTLE_MS) {
+                lastProgressTime = now;
+                onProgress({
+                  type: 'message',
+                  content: event.content.substring(0, 100), // Backward compat
+                  contentDelta: delta,
+                  contentSnapshot: contentBuffer,
+                  isComplete: false,
+                });
+              }
             }
           } catch {
             // Not valid JSON, skip
@@ -680,6 +707,16 @@ async function runContainerAgentInternal(
           },
           'Container completed',
         );
+
+        // Send final completion event with full content
+        if (onProgress && contentBuffer) {
+          onProgress({
+            type: 'message',
+            content: contentBuffer.substring(0, 100), // Backward compat
+            contentSnapshot: contentBuffer,
+            isComplete: true,
+          });
+        }
 
         resolve(output);
       } catch (err) {

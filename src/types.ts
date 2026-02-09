@@ -109,3 +109,39 @@ export interface IpcHandler {
   /** Process the IPC message */
   handle(data: Record<string, any>, context: IpcContext): Promise<void>;
 }
+
+// ============================================================================
+// Inline Keyboard Actions
+// ============================================================================
+
+export interface InlineAction {
+  /** Button label text */
+  label: string;
+  /** Action type */
+  type: 'reply' | 'command' | 'toggle';
+  /** Data payload (sent back when button pressed) */
+  data: string;
+}
+
+export interface InlineKeyboardConfig {
+  /** Actions to display as buttons */
+  actions: InlineAction[];
+  /** Layout: how many buttons per row (default: 2) */
+  columns?: number;
+}
+
+// ============================================================================
+// IPC Payloads (shared contract between host and container)
+// ============================================================================
+
+export interface SuggestActionsPayload {
+  actions: Array<{
+    label: string;
+    type: 'reply' | 'command' | 'toggle';
+    data: string;
+  }>;
+  /** Target chat to show actions in */
+  chatId?: string;
+  /** Message to accompany the actions */
+  message?: string;
+}

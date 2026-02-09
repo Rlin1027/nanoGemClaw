@@ -45,6 +45,39 @@ interface Translations {
   retry: string;
   feedback: string;
   errorOccurred: string;
+
+  // STT Enhancement
+  stt_transcribed: string;
+  stt_too_long: string;
+  stt_error: string;
+
+  // Onboarding
+  onboarding_welcome: (name: string) => string;
+  onboarding_features: string;
+  onboarding_try_it: string;
+  onboarding_skip: string;
+  onboarding_done: string;
+  onboarding_demo: string;
+
+  // Bot status and system messages
+  botConnected: string;
+  botRunning: (username: string, groupCount: number) => string;
+  maintenanceMode: string;
+  settingToggled: (setting: string, value: string) => string;
+  unknownAction: (action: string) => string;
+  retryFailed: string;
+  feedbackPrompt: string;
+  adminCommandFailed: string;
+  ipcWatcherStarted: string;
+
+  // Progress indicators
+  searching: string;
+  readingFile: string;
+  writingFile: string;
+  generatingImage: string;
+  executingCode: string;
+  usingTool: (toolName: string) => string;
+  responding: string;
 }
 
 // ============================================================================
@@ -83,6 +116,35 @@ const translations: Record<Language, Translations> = {
     retry: '重試',
     feedback: '反饋',
     errorOccurred: '發生錯誤，請稍後再試。',
+
+    stt_transcribed: '語音轉寫',
+    stt_too_long: '語音訊息超過 5 分鐘，請改用文字訊息',
+    stt_error: '語音轉寫失敗，請改用文字訊息',
+
+    onboarding_welcome: (name) => `歡迎使用 ${name}！我是你的 AI 助手。`,
+    onboarding_features: '以下是我能幫你做的事：\n• 回答問題和聊天\n• 搜尋網路資訊\n• 語音轉文字\n• 排程任務\n\n想試試看嗎？',
+    onboarding_try_it: '試試看',
+    onboarding_skip: '跳過',
+    onboarding_done: '設定完成！直接傳訊息給我就可以開始了。',
+    onboarding_demo: '好的！試著問我任何問題，例如「今天天氣如何？」或「幫我寫一封信」',
+
+    botConnected: 'Telegram bot 已連接',
+    botRunning: (username, groupCount) => `NanoGemClaw 運行中 (@${username})\n已註冊群組: ${groupCount}`,
+    maintenanceMode: '⚙️ 系統維護中，請稍後再試。',
+    settingToggled: (setting, value) => `已切換設定: ${setting} = ${value}`,
+    unknownAction: (action) => `處理中: ${action}...`,
+    retryFailed: '重試失敗：找不到原始訊息',
+    feedbackPrompt: '您對這個回復滿意嗎？',
+    adminCommandFailed: '❌ 管理員指令失敗，請查看日誌。',
+    ipcWatcherStarted: 'IPC 監視器已啟動',
+
+    searching: '🔍 正在搜尋網路...',
+    readingFile: '📄 正在讀取檔案...',
+    writingFile: '✍️ 正在寫入...',
+    generatingImage: '🎨 正在生成圖片...',
+    executingCode: '⚙️ 正在執行程式...',
+    usingTool: (toolName) => `🔧 使用工具: ${toolName}...`,
+    responding: '💬 回應中...',
   },
   en: {
     rateLimited: '⏳ Too many requests, please try again later.',
@@ -115,6 +177,35 @@ const translations: Record<Language, Translations> = {
     retry: 'Retry',
     feedback: 'Feedback',
     errorOccurred: 'An error occurred. Please try again.',
+
+    stt_transcribed: 'Voice transcribed',
+    stt_too_long: 'Voice message exceeds 5 minutes, please use text',
+    stt_error: 'Voice transcription failed, please use text',
+
+    onboarding_welcome: (name) => `Welcome to ${name}! I'm your AI assistant.`,
+    onboarding_features: "Here's what I can do:\n• Answer questions and chat\n• Search the web\n• Voice to text\n• Schedule tasks\n\nWant to try?",
+    onboarding_try_it: 'Try it',
+    onboarding_skip: 'Skip',
+    onboarding_done: 'Setup complete! Just send me a message to get started.',
+    onboarding_demo: "Great! Try asking me anything, like 'How's the weather?' or 'Help me write a letter'",
+
+    botConnected: 'Telegram bot connected',
+    botRunning: (username, groupCount) => `NanoGemClaw running (@${username})\nRegistered groups: ${groupCount}`,
+    maintenanceMode: '⚙️ System maintenance in progress, please try again later.',
+    settingToggled: (setting, value) => `Setting toggled: ${setting} = ${value}`,
+    unknownAction: (action) => `Processing: ${action}...`,
+    retryFailed: 'Retry failed: original message not found',
+    feedbackPrompt: 'Are you satisfied with this response?',
+    adminCommandFailed: '❌ Admin command failed. Check logs for details.',
+    ipcWatcherStarted: 'IPC watcher started',
+
+    searching: '🔍 Searching the web...',
+    readingFile: '📄 Reading file...',
+    writingFile: '✍️ Writing...',
+    generatingImage: '🎨 Generating image...',
+    executingCode: '⚙️ Executing code...',
+    usingTool: (toolName) => `🔧 Using tool: ${toolName}...`,
+    responding: '💬 Responding...',
   },
 };
 
@@ -142,6 +233,15 @@ export function t(): Translations {
 
 export function getTranslation(lang: Language): Translations {
   return translations[lang];
+}
+
+/**
+ * Get language for a specific group based on current global language.
+ * In the future, this could be extended to support per-group language preferences.
+ */
+export function getGroupLang(groupFolder: string): Language {
+  // For now, use global language. Can be extended later.
+  return currentLanguage;
 }
 
 export const availableLanguages: Language[] = ['zh-TW', 'en'];

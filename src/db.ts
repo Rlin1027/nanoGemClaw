@@ -858,6 +858,96 @@ export function getAllErrorStates(): { group: string; state: ErrorState }[] {
 }
 
 // ============================================================================
+// Analytics Aggregation
+// ============================================================================
+
+/** Get usage timeseries data for charts (daily aggregation) */
+export function getUsageTimeseriesDaily(days: number = 30): Array<{
+  date: string;
+  request_count: number;
+  total_tokens: number;
+  avg_response_ms: number;
+}> {
+  const db = getDatabase();
+  return db.prepare(`
+    SELECT
+      date(timestamp) as date,
+      COUNT(*) as request_count,
+      COALESCE(SUM(prompt_tokens + response_tokens), 0) as total_tokens,
+      COALESCE(AVG(duration_ms), 0) as avg_response_ms
+    FROM usage_stats
+    WHERE timestamp >= datetime('now', ?)
+    GROUP BY date(timestamp)
+    ORDER BY date ASC
+  `).all(`-${days} days`) as any[];
+}
+
+/** Get per-group token consumption ranking */
+export function getGroupTokenRanking(limit: number = 10): Array<{
+  group_folder: string;
+  total_tokens: number;
+  request_count: number;
+  avg_tokens_per_request: number;
+}> {
+  const db = getDatabase();
+  return db.prepare(`
+    SELECT
+      group_folder,
+      COALESCE(SUM(prompt_tokens + response_tokens), 0) as total_tokens,
+      COUNT(*) as request_count,
+      COALESCE(AVG(prompt_tokens + response_tokens), 0) as avg_tokens_per_request
+    FROM usage_stats
+    GROUP BY group_folder
+    ORDER BY total_tokens DESC
+    LIMIT ?
+  `).all(limit) as any[];
+}
+
+/** Get response time percentiles (P50/P95) */
+export function getResponseTimePercentiles(): {
+  p50: number;
+  p95: number;
+  avg: number;
+  count: number;
+} {
+  const db = getDatabase();
+  const count = (db.prepare('SELECT COUNT(*) as cnt FROM usage_stats WHERE duration_ms IS NOT NULL').get() as any)?.cnt || 0;
+  if (count === 0) return { p50: 0, p95: 0, avg: 0, count: 0 };
+
+  const p50Idx = Math.floor(count * 0.5);
+  const p95Idx = Math.floor(count * 0.95);
+
+  const p50 = (db.prepare('SELECT duration_ms FROM usage_stats WHERE duration_ms IS NOT NULL ORDER BY duration_ms ASC LIMIT 1 OFFSET ?').get(p50Idx) as any)?.duration_ms || 0;
+  const p95 = (db.prepare('SELECT duration_ms FROM usage_stats WHERE duration_ms IS NOT NULL ORDER BY duration_ms ASC LIMIT 1 OFFSET ?').get(p95Idx) as any)?.duration_ms || 0;
+  const avg = (db.prepare('SELECT AVG(duration_ms) as avg FROM usage_stats WHERE duration_ms IS NOT NULL').get() as any)?.avg || 0;
+
+  return { p50: Math.round(p50), p95: Math.round(p95), avg: Math.round(avg), count };
+}
+
+/** Get error rate timeseries */
+export function getErrorRateTimeseries(days: number = 30): Array<{
+  date: string;
+  total: number;
+  errors: number;
+  error_rate: number;
+}> {
+  const db = getDatabase();
+  // Note: usage_stats doesn't have a status column currently, so we'll create a placeholder structure
+  // This will return data once the table schema is extended
+  return db.prepare(`
+    SELECT
+      date(timestamp) as date,
+      COUNT(*) as total,
+      0 as errors,
+      0.0 as error_rate
+    FROM usage_stats
+    WHERE timestamp >= datetime('now', ?)
+    GROUP BY date(timestamp)
+    ORDER BY date ASC
+  `).all(`-${days} days`) as any[];
+}
+
+// ============================================================================
 // Rate Limiting (Sliding Window)
 // ============================================================================
 
@@ -973,4 +1063,19 @@ export function setPreference(groupFolder: string, key: string, value: string): 
     `INSERT INTO preferences (group_folder, key, value, updated_at) VALUES (?, ?, ?, ?)
      ON CONFLICT(group_folder, key) DO UPDATE SET value = excluded.value, updated_at = excluded.updated_at`
   ).run(groupFolder, key, value, now);
+}
+
+/**
+ * Get a single preference value for a group (convenience wrapper)
+ */
+export function getUserPreference(groupFolder: string, key: string): string | null {
+  const prefs = getPreferences(groupFolder);
+  return prefs[key] || null;
+}
+
+/**
+ * Set a single preference for a group (convenience wrapper)
+ */
+export function setUserPreference(groupFolder: string, key: string, value: string): void {
+  setPreference(groupFolder, key, value);
 }
