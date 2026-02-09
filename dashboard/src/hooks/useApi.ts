@@ -2,6 +2,24 @@ import { useState, useEffect, useCallback } from 'react';
 
 const API_BASE = 'http://localhost:3000';
 
+export async function apiFetch<T>(
+    url: string,
+    options?: RequestInit
+): Promise<T> {
+    const accessCode = localStorage.getItem('nanogemclaw_access_code') || '';
+    const res = await fetch(`${API_BASE}${url}`, {
+        ...options,
+        headers: {
+            'Content-Type': 'application/json',
+            'x-access-code': accessCode,
+            ...options?.headers,
+        },
+    });
+    if (!res.ok) throw new Error(`API Error: ${res.statusText}`);
+    const json = await res.json();
+    return (json.data ?? json) as T;
+}
+
 interface UseApiQueryResult<T> {
     data: T | null;
     isLoading: boolean;

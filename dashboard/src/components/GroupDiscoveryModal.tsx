@@ -14,7 +14,7 @@ interface GroupDiscoveryModalProps {
 }
 
 export function GroupDiscoveryModal({ registeredIds, onClose }: GroupDiscoveryModalProps) {
-    const { data: chats, loading } = useApiQuery<ChatInfo[]>('/api/groups/discover');
+    const { data: chats, isLoading: loading } = useApiQuery<ChatInfo[]>('/api/groups/discover');
     const [registering, setRegistering] = useState<string | null>(null);
     const [error, setError] = useState<string | null>(null);
 

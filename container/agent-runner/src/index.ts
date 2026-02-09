@@ -36,6 +36,8 @@ interface ContainerOutput {
   result: string | null;
   newSessionId?: string;
   error?: string;
+  promptTokens?: number;
+  responseTokens?: number;
 }
 
 interface StreamEvent {
@@ -149,6 +151,7 @@ async function runGeminiAgent(input: ContainerInput): Promise<ContainerOutput> {
     let stderr = '';
     let sessionId: string | undefined;
     let lastResponse: string | null = null;
+    let tokenStats: { promptTokens?: number; responseTokens?: number } = {};
 
     gemini.stdout.on('data', (data) => {
       const chunk = data.toString();
@@ -180,6 +183,14 @@ async function runGeminiAgent(input: ContainerInput): Promise<ContainerOutput> {
             } else {
               lastResponse += event.content;
             }
+          }
+
+          // Capture token stats from result event
+          if (event.type === 'result' && event.stats) {
+            const stats = event.stats as Record<string, unknown>;
+            tokenStats.promptTokens = typeof stats.totalInputTokens === 'number' ? stats.totalInputTokens : undefined;
+            tokenStats.responseTokens = typeof stats.totalOutputTokens === 'number' ? stats.totalOutputTokens : undefined;
+            log(`Tokens: in=${tokenStats.promptTokens ?? '?'} out=${tokenStats.responseTokens ?? '?'}`);
           }
         } catch {
           // Not JSON, skip
@@ -252,6 +263,8 @@ async function runGeminiAgent(input: ContainerInput): Promise<ContainerOutput> {
         status: 'success',
         result: response,
         newSessionId: sessionId,
+        promptTokens: tokenStats.promptTokens,
+        responseTokens: tokenStats.responseTokens,
       });
     });
 

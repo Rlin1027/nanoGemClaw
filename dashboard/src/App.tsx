@@ -5,6 +5,8 @@ import { Terminal } from './components/Terminal';
 import { MemoryEditor } from './components/MemoryEditor';
 import { LoginScreen } from './components/LoginScreen';
 import { SettingsParams } from './components/SettingsParams';
+import { TasksPage } from './pages/TasksPage';
+import { AnalyticsPage } from './pages/AnalyticsPage';
 import { Search, Loader2, Bot, ChevronRight } from 'lucide-react';
 import { useSocket } from './hooks/useSocket';
 import { useApiQuery } from './hooks/useApi';
@@ -159,13 +161,9 @@ function App() {
             {/* SETTINGS TAB */}
             {activeTab === 'settings' && <SettingsParams />}
 
-            {/* OTHER TABS */}
-            {['tasks', 'analytics'].includes(activeTab) && (
-                <div className="flex flex-col items-center justify-center h-96 text-slate-500">
-                    <div className="text-4xl mb-4 opacity-20">🚧</div>
-                    <p>This module is under construction.</p>
-                </div>
-            )}
+            {/* TASKS AND ANALYTICS TABS */}
+            {activeTab === 'tasks' && <TasksPage />}
+            {activeTab === 'analytics' && <AnalyticsPage />}
 
         </DashboardLayout>
     );

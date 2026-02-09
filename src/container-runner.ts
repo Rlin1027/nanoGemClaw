@@ -124,6 +124,8 @@ export interface ContainerOutput {
   result: string | null;
   newSessionId?: string;
   error?: string;
+  promptTokens?: number;
+  responseTokens?: number;
 }
 
 interface VolumeMount {
@@ -313,6 +315,8 @@ export async function runContainerAgent(
         timestamp: new Date().toISOString(),
         duration_ms: durationMs,
         is_scheduled_task: input.isScheduledTask,
+        prompt_tokens: result.promptTokens,
+        response_tokens: result.responseTokens,
       });
 
       // Track errors/success

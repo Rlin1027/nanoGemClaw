@@ -289,6 +289,7 @@ const ADMIN_COMMANDS = {
   language: 'Switch language (zh-TW/en)',
   persona: 'Set persona for a group (list/set)',
   trigger: 'Toggle @trigger requirement for a group (on/off)',
+  export: 'Export conversation history for a group',
 } as const;
 
 async function handleAdminCommand(
@@ -298,7 +299,7 @@ async function handleAdminCommand(
   const { getAllTasks, getUsageStats, getAllErrorStates } = await import('./db.js');
   const { t, setLanguage, availableLanguages, getLanguage } = await import('./i18n.js');
   type Language = import('./i18n.js').Language;
-  const { PERSONAS } = await import('./personas.js');
+  const { PERSONAS, getAllPersonas } = await import('./personas.js');
 
   switch (command) {
     // ... cases ...
@@ -307,7 +308,8 @@ async function handleAdminCommand(
       const subCmd = args[0];
 
       if (subCmd === 'list') {
-        return `🎭 **Available Personas**\n\n${Object.entries(PERSONAS)
+        const allPersonas = getAllPersonas();
+        return `🎭 **Available Personas**\n\n${Object.entries(allPersonas)
           .map(([key, p]) => `• \`${key}\`: ${p.name} - ${p.description}`)
           .join('\n')}`;
       }
@@ -329,13 +331,14 @@ async function handleAdminCommand(
           return `❌ Group not found: ${targetGroup}`;
         }
 
-        if (!PERSONAS[key]) {
+        const allPersonas = getAllPersonas();
+        if (!allPersonas[key]) {
           return `❌ Invalid persona key: ${key}. Use \`/admin persona list\``;
         }
 
         registeredGroups[targetId].persona = key;
         saveState();
-        return `✅ Persona for **${registeredGroups[targetId].name}** set to **${PERSONAS[key].name}**`;
+        return `✅ Persona for **${registeredGroups[targetId].name}** set to **${allPersonas[key].name}**`;
       }
 
       return 'Usage: `/admin persona list` or `/admin persona set <group_folder> <persona_key>`';
@@ -459,6 +462,60 @@ ${taskList}${moreText}`;
     case 'report': {
       const { getDailyReportMessage } = await import('./daily-report.js');
       return getDailyReportMessage();
+    }
+
+    case 'export': {
+      const targetFolder = args[0];
+      if (!targetFolder) {
+        return 'Usage: `/admin export <group_folder>`\nExports conversation as a file.';
+      }
+
+      // Find chatId for this folder
+      let targetChatId: string | undefined;
+      for (const [id, g] of Object.entries(registeredGroups)) {
+        if (g.folder === targetFolder || g.name === targetFolder) {
+          targetChatId = id;
+          break;
+        }
+      }
+
+      if (!targetChatId) {
+        return `❌ Group not found: ${targetFolder}`;
+      }
+
+      const { getConversationExport, formatExportAsMarkdown } = await import('./db.js');
+      const exportData = getConversationExport(targetChatId);
+
+      if (exportData.messageCount === 0) {
+        return `📭 No messages found for **${targetFolder}**.`;
+      }
+
+      const md = formatExportAsMarkdown(exportData);
+
+      // Write to temp file and send via Telegram
+      const tmpPath = path.join(DATA_DIR, `export-${targetFolder}-${Date.now()}.md`);
+      fs.writeFileSync(tmpPath, md, 'utf-8');
+
+      try {
+        // Send the file. We need to find a main group chatId to send to.
+        // The admin command is executed from the main group, so we use MAIN_GROUP_FOLDER
+        const mainChatId = Object.entries(registeredGroups).find(
+          ([, g]) => g.folder === MAIN_GROUP_FOLDER
+        )?.[0];
+
+        if (mainChatId && bot) {
+          await bot.sendDocument(parseInt(mainChatId), tmpPath, {
+            caption: `📤 Export: ${targetFolder} (${exportData.messageCount} messages)`,
+          });
+        }
+      } catch (err) {
+        logger.error({ err: formatError(err) }, 'Failed to send export file');
+      } finally {
+        // Clean up temp file
+        try { fs.unlinkSync(tmpPath); } catch {}
+      }
+
+      return `✅ Exported **${exportData.messageCount}** messages for **${targetFolder}**.`;
     }
 
     case 'language': {
@@ -1575,6 +1632,10 @@ async function main(): Promise<void> {
   await loadState();
   loadMaintenanceState();
 
+  // Load custom personas
+  const { loadCustomPersonas } = await import('./personas.js');
+  loadCustomPersonas();
+
   // Start health check server
   const { setHealthCheckDependencies, startHealthCheckServer } = await import('./health-check.js');
   setHealthCheckDependencies({
@@ -1662,6 +1723,17 @@ async function main(): Promise<void> {
     return group;
   });
 
+  // Inject chat JID resolver for export API
+  const { setChatJidResolver } = await import('./server.js');
+  setChatJidResolver((folder: string) => {
+    const entry = Object.entries(registeredGroups).find(([, g]) => g.folder === folder);
+    return entry ? entry[0] : null;
+  });
+
+  // Start automatic database backup
+  const { startBackupSchedule } = await import('./backup.js');
+  startBackupSchedule();
+
   // Connect to Telegram
   await connectTelegram();
 }
@@ -1678,6 +1750,8 @@ process.on('SIGINT', async () => {
     const { stopHealthCheckServer } = await import('./health-check.js');
     await stopHealthCheckServer();
     await bot?.stopPolling();
+    const { stopBackupSchedule } = await import('./backup.js');
+    stopBackupSchedule();
     saveState();
     closeDatabase();
     console.log('State saved & database closed. Goodbye!');
@@ -1693,6 +1767,8 @@ process.on('SIGTERM', async () => {
     const { stopHealthCheckServer } = await import('./health-check.js');
     await stopHealthCheckServer();
     await bot?.stopPolling();
+    const { stopBackupSchedule } = await import('./backup.js');
+    stopBackupSchedule();
     saveState();
     closeDatabase();
   } catch (err) {

@@ -18,10 +18,10 @@ interface SecretInfo {
 }
 
 export function SettingsPage() {
-    const { data: config, loading, refetch } = useApiQuery<ConfigData>('/api/config');
+    const { data: config, isLoading, refetch } = useApiQuery<ConfigData>('/api/config');
     const { data: secrets } = useApiQuery<SecretInfo[]>('/api/config/secrets');
-    const { mutate: updateConfig } = useApiMutation<any>('/api/config', 'PUT');
-    const { mutate: clearErrors, loading: clearingErrors } = useApiMutation<any>('/api/errors/clear', 'POST');
+    const { mutate: updateConfig } = useApiMutation<any, Partial<ConfigData>>('/api/config', 'PUT');
+    const { mutate: clearErrors, isLoading: clearingErrors } = useApiMutation<any, void>('/api/errors/clear', 'POST');
 
     const [maintenanceMode, setMaintenanceMode] = useState(false);
     const [logLevel, setLogLevel] = useState('info');
@@ -51,7 +51,7 @@ export function SettingsPage() {
         return `${h}h ${m}m`;
     };
 
-    if (loading) {
+    if (isLoading) {
         return (
             <div className="flex items-center justify-center py-20 text-slate-500">
                 Loading settings...
@@ -154,7 +154,7 @@ export function SettingsPage() {
                             <div className="text-xs text-slate-400">Reset all group error counters.</div>
                         </div>
                         <button
-                            onClick={() => clearErrors()}
+                            onClick={() => clearErrors(undefined as void)}
                             disabled={clearingErrors}
                             className="flex items-center gap-2 px-3 py-1.5 bg-red-500/20 hover:bg-red-500/30 text-red-300 rounded-lg text-sm transition-colors disabled:opacity-50"
                         >

@@ -679,6 +679,87 @@ export function deleteOldMessages(
 }
 
 // ============================================================================
+// Conversation Export
+// ============================================================================
+
+export interface ExportMessage {
+  id: string;
+  sender: string;
+  sender_name: string;
+  content: string;
+  timestamp: string;
+  is_from_me: boolean;
+}
+
+export interface ConversationExport {
+  chatJid: string;
+  exportedAt: string;
+  messageCount: number;
+  messages: ExportMessage[];
+}
+
+/**
+ * Export conversation messages for a given chat JID.
+ * Supports optional time filtering with 'since' parameter.
+ */
+export function getConversationExport(
+  chatJid: string,
+  since?: string,
+): ConversationExport {
+  let query = `
+    SELECT id, sender, sender_name, content, timestamp, is_from_me
+    FROM messages
+    WHERE chat_jid = ?
+  `;
+  const params: string[] = [chatJid];
+
+  if (since) {
+    query += ' AND timestamp > ?';
+    params.push(since);
+  }
+
+  query += ' ORDER BY timestamp ASC';
+
+  const messages = db.prepare(query).all(...params) as ExportMessage[];
+
+  return {
+    chatJid,
+    exportedAt: new Date().toISOString(),
+    messageCount: messages.length,
+    messages: messages.map(m => ({
+      ...m,
+      is_from_me: !!m.is_from_me,
+    })),
+  };
+}
+
+/**
+ * Format conversation export as Markdown.
+ */
+export function formatExportAsMarkdown(exp: ConversationExport): string {
+  const lines: string[] = [
+    `# Conversation Export`,
+    ``,
+    `- **Chat:** ${exp.chatJid}`,
+    `- **Exported:** ${exp.exportedAt}`,
+    `- **Messages:** ${exp.messageCount}`,
+    ``,
+    `---`,
+    ``,
+  ];
+
+  for (const msg of exp.messages) {
+    const time = new Date(msg.timestamp).toLocaleString();
+    const name = msg.sender_name || msg.sender || 'Unknown';
+    lines.push(`**${name}** (${time}):`);
+    lines.push(msg.content);
+    lines.push('');
+  }
+
+  return lines.join('\n');
+}
+
+// ============================================================================
 // Error Tracking
 // ============================================================================
 

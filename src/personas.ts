@@ -4,6 +4,9 @@
  * Provides pre-defined system prompts for different agent personalities.
  */
 
+import fs from 'fs';
+import path from 'path';
+
 export interface Persona {
   name: string;
   description: string;
@@ -43,6 +46,61 @@ export const PERSONAS: Record<string, Persona> = {
   },
 };
 
+const CUSTOM_PERSONAS_FILE = path.join(process.cwd(), 'data', 'custom_personas.json');
+
+let customPersonas: Record<string, Persona> = {};
+
+/**
+ * Load custom personas from disk. Called at startup.
+ */
+export function loadCustomPersonas(): void {
+  try {
+    if (fs.existsSync(CUSTOM_PERSONAS_FILE)) {
+      const data = JSON.parse(fs.readFileSync(CUSTOM_PERSONAS_FILE, 'utf-8'));
+      customPersonas = data;
+    }
+  } catch {
+    customPersonas = {};
+  }
+}
+
+function saveCustomPersonas(): void {
+  const dir = path.dirname(CUSTOM_PERSONAS_FILE);
+  fs.mkdirSync(dir, { recursive: true });
+  fs.writeFileSync(CUSTOM_PERSONAS_FILE, JSON.stringify(customPersonas, null, 2));
+}
+
+/**
+ * Get all personas (built-in + custom).
+ */
+export function getAllPersonas(): Record<string, Persona> {
+  return { ...PERSONAS, ...customPersonas };
+}
+
+/**
+ * Create or update a custom persona.
+ */
+export function saveCustomPersona(key: string, persona: Persona): void {
+  if (PERSONAS[key]) {
+    throw new Error(`Cannot override built-in persona: ${key}`);
+  }
+  customPersonas[key] = persona;
+  saveCustomPersonas();
+}
+
+/**
+ * Delete a custom persona.
+ */
+export function deleteCustomPersona(key: string): boolean {
+  if (PERSONAS[key]) {
+    throw new Error(`Cannot delete built-in persona: ${key}`);
+  }
+  if (!customPersonas[key]) return false;
+  delete customPersonas[key];
+  saveCustomPersonas();
+  return true;
+}
+
 /**
  * Get the effective system prompt for a group
  * Priority: Group Custom Prompt > Persona Prompt > Default Prompt
@@ -55,8 +113,9 @@ export function getEffectiveSystemPrompt(
     return groupCustomPrompt;
   }
 
-  if (personaKey && PERSONAS[personaKey]) {
-    return PERSONAS[personaKey].systemPrompt;
+  const allPersonas = getAllPersonas();
+  if (personaKey && allPersonas[personaKey]) {
+    return allPersonas[personaKey].systemPrompt;
   }
 
   return PERSONAS.default.systemPrompt;

@@ -7,7 +7,7 @@ import { TaskFormModal } from '../components/TaskFormModal';
 
 export function TasksPage() {
     const { groups } = useSocket();
-    const { data: tasks, loading, refetch } = useApiQuery<any[]>('/api/tasks');
+    const { data: tasks, isLoading, refetch } = useApiQuery<any[]>('/api/tasks');
     const [showForm, setShowForm] = useState(false);
     const [filterGroup, setFilterGroup] = useState('');
     const [filterStatus, setFilterStatus] = useState('');
@@ -60,7 +60,7 @@ export function TasksPage() {
                 </select>
             </div>
 
-            {loading ? (
+            {isLoading ? (
                 <div className="text-slate-500 text-center py-8">Loading tasks...</div>
             ) : (
                 <TaskList tasks={filteredTasks} onRefresh={refetch} />

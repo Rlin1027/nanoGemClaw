@@ -1,6 +1,6 @@
 import { useApiQuery, useApiMutation } from '../hooks/useApi';
 import { ToggleSwitch } from './ToggleSwitch'; // Assuming this exists or I will create it
-import { Shield, Server, Terminal, Key } from 'lucide-react';
+import { Shield, Server, Key } from 'lucide-react';
 
 interface ConfigData {
     maintenanceMode: boolean;
@@ -42,28 +42,20 @@ export function SettingsParams() {
                     System Controls
                 </h3>
 
-                <div className="space-y-6">
-                    <div className="flex items-center justify-between">
-                        <div>
-                            <div className="font-medium text-slate-200">Maintenance Mode</div>
-                            <div className="text-sm text-slate-500">Pause all agents. No new tasks will run.</div>
-                        </div>
-                        <ToggleSwitch
-                            checked={config.maintenanceMode}
-                            onChange={handleToggleMaintenance}
-                        />
-                    </div>
+                <div className="space-y-4">
+                    <ToggleSwitch
+                        enabled={config.maintenanceMode}
+                        onChange={handleToggleMaintenance}
+                        label="Maintenance Mode"
+                        description="Pause all agents. No new tasks will run."
+                    />
 
-                    <div className="flex items-center justify-between">
-                        <div>
-                            <div className="font-medium text-slate-200">Debug Logging</div>
-                            <div className="text-sm text-slate-500">Enable verbose output (for troubleshooting).</div>
-                        </div>
-                        <ToggleSwitch
-                            checked={config.logLevel === 'debug'}
-                            onChange={handleToggleDebug}
-                        />
-                    </div>
+                    <ToggleSwitch
+                        enabled={config.logLevel === 'debug'}
+                        onChange={handleToggleDebug}
+                        label="Debug Logging"
+                        description="Enable verbose output (for troubleshooting)."
+                    />
                 </div>
             </section>
 

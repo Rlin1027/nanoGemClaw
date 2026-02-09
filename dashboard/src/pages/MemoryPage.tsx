@@ -27,7 +27,7 @@ export function MemoryPage({ groups }: { groups: GroupData[] }) {
     }, [groups, selectedGroup]);
 
     const prompt = usePrompt(selectedGroup || null);
-    const { data: memorySummary, loading: memoryLoading } = useApiQuery<MemorySummary>(
+    const { data: memorySummary, isLoading: memoryLoading } = useApiQuery<MemorySummary>(
         selectedGroup ? `/api/memory/${selectedGroup}` : '/api/health'
     );
 

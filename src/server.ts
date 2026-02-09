@@ -27,6 +27,7 @@ let groupRegistrar: ((chatId: string, name: string) => any) | null = null;
 let groupUpdater:
   | ((folder: string, updates: Record<string, any>) => any)
   | null = null;
+let chatJidResolver: ((folder: string) => string | null) | null = null;
 
 // Path traversal protection
 const SAFE_FOLDER_RE = /^[a-zA-Z0-9_-]+$/;
@@ -258,8 +259,8 @@ export function startDashboardServer() {
 
     // Validate persona if provided
     if (persona !== undefined) {
-      const { PERSONAS } = await import('./personas.js');
-      if (!PERSONAS[persona]) {
+      const { getAllPersonas } = await import('./personas.js');
+      if (!getAllPersonas()[persona]) {
         res.status(400).json({ error: `Invalid persona: ${persona}` });
         return;
       }
@@ -290,10 +291,52 @@ export function startDashboardServer() {
   // Get available personas
   app.get('/api/personas', async (_req, res) => {
     try {
-      const { PERSONAS } = await import('./personas.js');
-      res.json({ data: PERSONAS });
+      const { getAllPersonas } = await import('./personas.js');
+      res.json({ data: getAllPersonas() });
     } catch {
       res.status(500).json({ error: 'Failed to fetch personas' });
+    }
+  });
+
+  // Create custom persona
+  app.post('/api/personas', async (req, res) => {
+    try {
+      const { key, name, description, systemPrompt } = req.body;
+      if (!key || !name || !systemPrompt) {
+        res.status(400).json({ error: 'Missing required fields: key, name, systemPrompt' });
+        return;
+      }
+      if (!SAFE_FOLDER_RE.test(key)) {
+        res.status(400).json({ error: 'Invalid persona key (alphanumeric, dash, underscore only)' });
+        return;
+      }
+      const { saveCustomPersona } = await import('./personas.js');
+      saveCustomPersona(key, { name, description: description || '', systemPrompt });
+      res.json({ data: { key } });
+    } catch (err) {
+      const message = err instanceof Error ? err.message : 'Failed to create persona';
+      res.status(400).json({ error: message });
+    }
+  });
+
+  // Delete custom persona
+  app.delete('/api/personas/:key', async (req, res) => {
+    try {
+      const { key } = req.params;
+      if (!SAFE_FOLDER_RE.test(key)) {
+        res.status(400).json({ error: 'Invalid persona key' });
+        return;
+      }
+      const { deleteCustomPersona } = await import('./personas.js');
+      const deleted = deleteCustomPersona(key);
+      if (!deleted) {
+        res.status(404).json({ error: 'Persona not found' });
+        return;
+      }
+      res.json({ data: { success: true } });
+    } catch (err) {
+      const message = err instanceof Error ? err.message : 'Failed to delete persona';
+      res.status(400).json({ error: message });
     }
   });
 
@@ -638,6 +681,47 @@ export function startDashboardServer() {
   });
 
   // ================================================================
+  // REST API: Conversation Export
+  // ================================================================
+  app.get('/api/groups/:folder/export', async (req, res) => {
+    const { folder } = req.params;
+    if (!validateFolder(folder)) {
+      res.status(400).json({ error: 'Invalid folder' });
+      return;
+    }
+
+    try {
+      const { getConversationExport, formatExportAsMarkdown } = await import('./db.js');
+      const format = (req.query.format as string) || 'json';
+      const since = req.query.since as string | undefined;
+
+      // Resolve chatJid from folder using the injected resolver
+      if (!chatJidResolver) {
+        res.status(503).json({ error: 'Chat resolver not available' });
+        return;
+      }
+      const chatJid = chatJidResolver(folder);
+      if (!chatJid) {
+        res.status(404).json({ error: 'Could not resolve chat for this group' });
+        return;
+      }
+
+      const exportData = getConversationExport(chatJid, since);
+
+      if (format === 'md' || format === 'markdown') {
+        const md = formatExportAsMarkdown(exportData);
+        res.setHeader('Content-Type', 'text/markdown; charset=utf-8');
+        res.setHeader('Content-Disposition', `attachment; filename="${folder}-export.md"`);
+        res.send(md);
+      } else {
+        res.json({ data: exportData });
+      }
+    } catch (err) {
+      res.status(500).json({ error: 'Failed to export conversation' });
+    }
+  });
+
+  // ================================================================
   // REST API: Config
   // ================================================================
   app.get('/api/config', async (_req, res) => {
@@ -651,7 +735,6 @@ export function startDashboardServer() {
           logLevel: currentLogLevel,
           dashboardHost: DASHBOARD_HOST,
           dashboardPort: DASHBOARD_PORT,
-          uptime: process.uptime(),
           uptime: process.uptime(),
           connectedClients: io ? io.engine.clientsCount : 0,
           authRequired: !!process.env.DASHBOARD_ACCESS_CODE,
@@ -869,6 +952,13 @@ export function setGroupUpdater(
   fn: (folder: string, updates: Record<string, any>) => any,
 ) {
   groupUpdater = fn;
+}
+
+/**
+ * Inject the chatJid resolver function
+ */
+export function setChatJidResolver(fn: (folder: string) => string | null) {
+  chatJidResolver = fn;
 }
 
 /**
