@@ -171,13 +171,13 @@ export function GroupDetailPage({ groupFolder, onBack }: GroupDetailPageProps) {
                         disabled={saving}
                     />
                     {/* Model Selector */}
-                    <div className="p-3 bg-slate-800/50 rounded-lg">
-                        <label className="block text-xs font-medium text-slate-400 mb-1">AI Model</label>
+                    <div className="p-4 bg-slate-900/50 rounded-lg border border-slate-800">
+                        <label className="block text-sm font-medium text-slate-200 mb-2">AI Model</label>
                         <select
                             value={(group as any).geminiModel || 'gemini-3-flash-preview'}
                             onChange={e => handleSettingChange({ geminiModel: e.target.value })}
                             disabled={saving}
-                            className="w-full bg-slate-900 text-white text-sm rounded-md border border-slate-700 px-2 py-1.5 focus:border-blue-500 focus:outline-none"
+                            className="w-full bg-slate-800 border border-slate-700 rounded-lg px-3 py-2 text-sm text-slate-200 focus:outline-none focus:ring-2 focus:ring-blue-500/50"
                         >
                             <option value="gemini-3-flash-preview">Gemini 3 Flash (Fast)</option>
                             <option value="gemini-3-pro-preview">Gemini 3 Pro (Smart)</option>
