@@ -132,9 +132,9 @@ export interface ProgressInfo {
   type: 'tool_use' | 'thinking' | 'message';
   toolName?: string;
   content?: string;
-  contentDelta?: string;    // 增量文字內容
+  contentDelta?: string; // 增量文字內容
   contentSnapshot?: string; // 當前完整累積文字（供 editMessage 使用）
-  isComplete?: boolean;     // 回覆是否完成
+  isComplete?: boolean; // 回覆是否完成
 }
 
 interface VolumeMount {
@@ -438,9 +438,11 @@ Only suggest follow-ups when they genuinely add value. Do not suggest them for s
         (m) =>
           `${m.hostPath} -> ${m.containerPath}${m.readonly ? ' (ro)' : ''}`,
       ),
-      containerArgs: containerArgs.map(a =>
-        a.startsWith('GEMINI_API_KEY=') ? 'GEMINI_API_KEY=[REDACTED]' : a
-      ).join(' '),
+      containerArgs: containerArgs
+        .map((a) =>
+          a.startsWith('GEMINI_API_KEY=') ? 'GEMINI_API_KEY=[REDACTED]' : a,
+        )
+        .join(' '),
     },
     'Container mount configuration',
   );

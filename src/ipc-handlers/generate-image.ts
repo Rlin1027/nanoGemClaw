@@ -18,7 +18,10 @@ export const GenerateImageHandler: IpcHandler = {
     )?.[1];
 
     if (!targetGroup) {
-      logger.warn({ chatJid: data.chatJid }, 'Cannot generate image: group not found');
+      logger.warn(
+        { chatJid: data.chatJid },
+        'Cannot generate image: group not found',
+      );
       return;
     }
 
@@ -38,10 +41,13 @@ export const GenerateImageHandler: IpcHandler = {
       });
       logger.info(
         { chatJid: data.chatJid, prompt: data.prompt.slice(0, 50) },
-        'Image generated and sent'
+        'Image generated and sent',
       );
     } else {
-      await context.sendMessage(data.chatJid, `❌ Image generation failed: ${result.error}`);
+      await context.sendMessage(
+        data.chatJid,
+        `❌ Image generation failed: ${result.error}`,
+      );
     }
   },
 };

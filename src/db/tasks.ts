@@ -167,11 +167,15 @@ export function getTaskRunLogs(taskId: string, limit = 10): TaskRunLog[] {
  */
 export function getActiveTaskCountsBatch(): Map<string, number> {
   const db = getDatabase();
-  const rows = db.prepare(`
+  const rows = db
+    .prepare(
+      `
     SELECT group_folder, COUNT(*) as cnt
     FROM scheduled_tasks WHERE status = 'active'
     GROUP BY group_folder
-  `).all() as Array<{ group_folder: string; cnt: number }>;
+  `,
+    )
+    .all() as Array<{ group_folder: string; cnt: number }>;
   const map = new Map<string, number>();
   for (const row of rows) map.set(row.group_folder, row.cnt);
   return map;

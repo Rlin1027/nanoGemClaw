@@ -64,19 +64,26 @@ export function getPreferences(groupFolder: string): Record<string, string> {
 /**
  * Set a single preference for a group
  */
-export function setPreference(groupFolder: string, key: string, value: string): void {
+export function setPreference(
+  groupFolder: string,
+  key: string,
+  value: string,
+): void {
   const db = getDatabase();
   const now = new Date().toISOString();
   db.prepare(
     `INSERT INTO preferences (group_folder, key, value, updated_at) VALUES (?, ?, ?, ?)
-     ON CONFLICT(group_folder, key) DO UPDATE SET value = excluded.value, updated_at = excluded.updated_at`
+     ON CONFLICT(group_folder, key) DO UPDATE SET value = excluded.value, updated_at = excluded.updated_at`,
   ).run(groupFolder, key, value, now);
 }
 
 /**
  * Get a single preference value for a group (convenience wrapper)
  */
-export function getUserPreference(groupFolder: string, key: string): string | null {
+export function getUserPreference(
+  groupFolder: string,
+  key: string,
+): string | null {
   const prefs = getPreferences(groupFolder);
   return prefs[key] || null;
 }
@@ -84,6 +91,10 @@ export function getUserPreference(groupFolder: string, key: string): string | nu
 /**
  * Set a single preference for a group (convenience wrapper)
  */
-export function setUserPreference(groupFolder: string, key: string, value: string): void {
+export function setUserPreference(
+  groupFolder: string,
+  key: string,
+  value: string,
+): void {
   setPreference(groupFolder, key, value);
 }
