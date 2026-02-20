@@ -10,6 +10,7 @@ interface GroupDetail {
     persona?: string;
     requireTrigger?: boolean;
     enableWebSearch?: boolean;
+    enableFastPath?: boolean;
     folder: string;
     tasks: any[];
     usage: {
@@ -51,7 +52,9 @@ export function useGroupDetail(folder: string | undefined) {
     const updateSettings = useCallback(async (updates: {
         persona?: string;
         enableWebSearch?: boolean;
+        enableFastPath?: boolean;
         requireTrigger?: boolean;
+        geminiModel?: string;
         name?: string;
     }) => {
         if (!folder) return;

@@ -171,6 +171,13 @@ export function GroupDetailPage({ groupFolder, onBack }: GroupDetailPageProps) {
                         onChange={val => handleSettingChange({ enableWebSearch: val })}
                         disabled={saving}
                     />
+                    <ToggleSwitch
+                        label="Fast Path"
+                        description="Direct API (skip container)"
+                        enabled={group.enableFastPath !== false}
+                        onChange={val => handleSettingChange({ enableFastPath: val })}
+                        disabled={saving}
+                    />
                     {/* Model Selector */}
                     <div className="p-4 bg-slate-900/50 rounded-lg border border-slate-800">
                         <label className="block text-sm font-medium text-slate-200 mb-2">AI Model</label>

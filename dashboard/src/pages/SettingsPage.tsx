@@ -1,5 +1,5 @@
 import { useState, useEffect } from 'react';
-import { Shield, Clock, Wifi, AlertTriangle, Trash2, RefreshCw, Key } from 'lucide-react';
+import { Shield, Clock, Wifi, AlertTriangle, Trash2, RefreshCw, Key, Zap } from 'lucide-react';
 import { useApiQuery, useApiMutation } from '../hooks/useApi';
 
 interface ConfigData {
@@ -17,9 +17,22 @@ interface SecretInfo {
     masked: string | null;
 }
 
+interface CacheStatsData {
+    fastPathEnabled: boolean;
+    geminiClientAvailable: boolean;
+    totalCaches: number;
+    activeCaches: number;
+    entries: Array<{
+        groupFolder: string;
+        model: string;
+        expiresIn: number;
+    }>;
+}
+
 export function SettingsPage() {
     const { data: config, isLoading, refetch } = useApiQuery<ConfigData>('/api/config');
     const { data: secrets } = useApiQuery<SecretInfo[]>('/api/config/secrets');
+    const { data: cacheStats } = useApiQuery<CacheStatsData>('/api/config/cache-stats');
     const { mutate: updateConfig } = useApiMutation<any, Partial<ConfigData>>('/api/config', 'PUT');
     const { mutate: clearErrors, isLoading: clearingErrors } = useApiMutation<any, void>('/api/errors/clear', 'POST');
 
@@ -116,6 +129,51 @@ export function SettingsPage() {
                         <div className="text-slate-200 font-mono font-bold">{config?.connectedClients ?? 0}</div>
                     </div>
                 </div>
+            </section>
+
+            {/* Fast Path & Cache Stats */}
+            <section>
+                <h2 className="text-lg font-bold text-slate-100 mb-4 flex items-center gap-2">
+                    <Zap size={20} className="text-yellow-400" /> Fast Path
+                </h2>
+                <div className="grid grid-cols-3 gap-3 mb-3">
+                    <div className="bg-slate-900/50 border border-slate-800 rounded-lg p-4">
+                        <div className="text-xs text-slate-500 mb-1">Status</div>
+                        <div className="flex items-center gap-2">
+                            <span className={`w-2 h-2 rounded-full ${cacheStats?.fastPathEnabled && cacheStats?.geminiClientAvailable ? 'bg-green-400' : 'bg-slate-600'}`} />
+                            <span className="text-slate-200 font-medium text-sm">
+                                {cacheStats?.fastPathEnabled && cacheStats?.geminiClientAvailable
+                                    ? 'Active'
+                                    : !cacheStats?.fastPathEnabled
+                                        ? 'Disabled'
+                                        : 'No API Key'}
+                            </span>
+                        </div>
+                    </div>
+                    <div className="bg-slate-900/50 border border-slate-800 rounded-lg p-4">
+                        <div className="text-xs text-slate-500 mb-1">Active Caches</div>
+                        <div className="text-slate-200 font-mono font-bold">{cacheStats?.activeCaches ?? 0}</div>
+                    </div>
+                    <div className="bg-slate-900/50 border border-slate-800 rounded-lg p-4">
+                        <div className="text-xs text-slate-500 mb-1">Total Caches</div>
+                        <div className="text-slate-200 font-mono font-bold">{cacheStats?.totalCaches ?? 0}</div>
+                    </div>
+                </div>
+                {cacheStats?.entries && cacheStats.entries.length > 0 && (
+                    <div className="bg-slate-900/50 border border-slate-800 rounded-lg divide-y divide-slate-800">
+                        {cacheStats.entries.map(entry => (
+                            <div key={entry.groupFolder} className="flex items-center justify-between p-3">
+                                <div>
+                                    <span className="text-slate-300 text-sm font-medium">{entry.groupFolder}</span>
+                                    <span className="text-xs text-slate-500 ml-2">{entry.model}</span>
+                                </div>
+                                <span className="text-xs text-slate-400 font-mono">
+                                    TTL {Math.floor(entry.expiresIn / 60)}m
+                                </span>
+                            </div>
+                        ))}
+                    </div>
+                )}
             </section>
 
             {/* Secrets Status */}
