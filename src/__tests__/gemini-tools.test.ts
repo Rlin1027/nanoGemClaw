@@ -405,9 +405,7 @@ describe('gemini-tools', () => {
         'chat-1',
       );
 
-      // Image generated but can't be sent (no bot) — code returns
-      // success from generateImage but includes fallback error message
-      expect(result.response.success).toBe(true);
+      expect(result.response.success).toBe(false);
       expect(result.response.error).toBe('No bot instance available');
     });
   });

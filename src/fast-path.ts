@@ -130,7 +130,7 @@ async function runFastPathInner(
     let systemInstruction = input.systemPrompt || '';
 
     // Add follow-up suggestions instruction if enabled
-    if ((group as any).enableFollowUp !== false) {
+    if (group.enableFollowUp !== false) {
       systemInstruction += `
 
 After your response, if there are natural follow-up questions the user might ask, suggest 2-3 of them on separate lines at the very end of your response, each prefixed with ">>>" (three greater-than signs). For example:

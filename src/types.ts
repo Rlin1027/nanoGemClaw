@@ -51,6 +51,8 @@ export interface RegisteredGroup {
   geminiModel?: string;
   /** Use direct Gemini API (fast path) instead of container for simple queries (default: true) */
   enableFastPath?: boolean;
+  /** Enable follow-up question suggestions at the end of responses (default: true) */
+  enableFollowUp?: boolean;
 }
 
 export interface Session {

@@ -287,7 +287,7 @@ describe('gemini-client', () => {
       expect(callArgs.config).not.toHaveProperty('cachedContent');
     });
 
-    it('should skip empty chunks', async () => {
+    it('should yield empty chunks as-is', async () => {
       const mockStream = (async function* () {
         yield {}; // empty chunk
         yield { text: 'data' };

@@ -296,20 +296,27 @@ export async function executeFunctionCall(
         const outputDir = path.join(GROUPS_DIR, groupFolder, 'media');
         const result = await generateImage(args.prompt, outputDir);
 
-        if (result.success && result.imagePath && context.bot) {
-          await context.bot.sendPhoto(chatJid, result.imagePath, {
-            caption: `🎨 Generated: ${args.prompt.slice(0, 100)}`,
-          });
-          return { name, response: { success: true, sent: true } };
+        if (!result.success) {
+          return {
+            name,
+            response: {
+              success: false,
+              error: result.error || 'Image generation failed',
+            },
+          };
         }
 
-        return {
-          name,
-          response: {
-            success: result.success,
-            error: result.error || 'No bot instance available',
-          },
-        };
+        if (!context.bot) {
+          return {
+            name,
+            response: { success: false, error: 'No bot instance available' },
+          };
+        }
+
+        await context.bot.sendPhoto(chatJid, result.imagePath, {
+          caption: `🎨 Generated: ${args.prompt.slice(0, 100)}`,
+        });
+        return { name, response: { success: true, sent: true } };
       }
 
       case 'set_preference': {
