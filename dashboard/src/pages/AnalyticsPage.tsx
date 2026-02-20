@@ -4,7 +4,7 @@ import { useSocket } from '../hooks/useSocket';
 import { UsageChart } from '../components/UsageChart';
 import { StatsCards } from '../components/StatsCards';
 import { LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, BarChart, Bar, Legend, Area, AreaChart } from 'recharts';
-import { BarChart3, TrendingUp, Clock, AlertTriangle } from 'lucide-react';
+import { BarChart3, TrendingUp, Clock, AlertTriangle, Zap } from 'lucide-react';
 
 type Period = '1d' | '7d' | '30d';
 
@@ -26,6 +26,7 @@ export function AnalyticsPage() {
     const { data: tokenRanking } = useApiQuery<any[]>('/api/analytics/token-ranking?limit=10');
     const { data: responseTimes } = useApiQuery<any>('/api/analytics/response-times');
     const { data: errorRate } = useApiQuery<any[]>(`/api/analytics/error-rate?days=${days}`);
+    const { data: fastPathData } = useApiQuery<any>(`/api/analytics/fast-path?days=${days}`);
 
     const totalTokens = usage ? usage.total_prompt_tokens + usage.total_response_tokens : 0;
     const avgTime = usage && usage.total_requests > 0 ? (usage.avg_duration_ms / 1000).toFixed(1) + 's' : 'N/A';
@@ -165,6 +166,76 @@ export function AnalyticsPage() {
                     </AreaChart>
                 </ResponsiveContainer>
             </div>
+
+            {/* Fast Path vs Container */}
+            {fastPathData && (fastPathData.fastPath?.requests > 0 || fastPathData.container?.requests > 0) && (
+                <>
+                    <div className="grid grid-cols-2 gap-4">
+                        <div className="bg-slate-800 rounded-lg p-6 border border-slate-700">
+                            <div className="flex items-center gap-2 mb-3">
+                                <Zap className="w-5 h-5 text-yellow-400" />
+                                <h3 className="text-sm font-medium text-white">Fast Path</h3>
+                            </div>
+                            <div className="space-y-2">
+                                <div className="flex justify-between">
+                                    <span className="text-sm text-slate-400">Requests</span>
+                                    <span className="text-sm font-mono text-white">{fastPathData.fastPath?.requests?.toLocaleString() ?? 0}</span>
+                                </div>
+                                <div className="flex justify-between">
+                                    <span className="text-sm text-slate-400">Avg Latency</span>
+                                    <span className="text-sm font-mono text-emerald-400">{((fastPathData.fastPath?.avgDurationMs ?? 0) / 1000).toFixed(2)}s</span>
+                                </div>
+                                <div className="flex justify-between">
+                                    <span className="text-sm text-slate-400">Tokens</span>
+                                    <span className="text-sm font-mono text-white">{fastPathData.fastPath?.totalTokens?.toLocaleString() ?? 0}</span>
+                                </div>
+                            </div>
+                        </div>
+                        <div className="bg-slate-800 rounded-lg p-6 border border-slate-700">
+                            <div className="flex items-center gap-2 mb-3">
+                                <BarChart3 className="w-5 h-5 text-blue-400" />
+                                <h3 className="text-sm font-medium text-white">Container</h3>
+                            </div>
+                            <div className="space-y-2">
+                                <div className="flex justify-between">
+                                    <span className="text-sm text-slate-400">Requests</span>
+                                    <span className="text-sm font-mono text-white">{fastPathData.container?.requests?.toLocaleString() ?? 0}</span>
+                                </div>
+                                <div className="flex justify-between">
+                                    <span className="text-sm text-slate-400">Avg Latency</span>
+                                    <span className="text-sm font-mono text-amber-400">{((fastPathData.container?.avgDurationMs ?? 0) / 1000).toFixed(2)}s</span>
+                                </div>
+                                <div className="flex justify-between">
+                                    <span className="text-sm text-slate-400">Tokens</span>
+                                    <span className="text-sm font-mono text-white">{fastPathData.container?.totalTokens?.toLocaleString() ?? 0}</span>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                    {fastPathData.timeseries?.length > 0 && (
+                        <div className="bg-slate-800 rounded-lg p-6 border border-slate-700">
+                            <div className="flex items-center gap-2 mb-4">
+                                <Zap className="w-5 h-5 text-yellow-400" />
+                                <h3 className="text-sm font-medium text-white">Fast Path vs Container Requests</h3>
+                            </div>
+                            <ResponsiveContainer width="100%" height={250}>
+                                <BarChart data={fastPathData.timeseries}>
+                                    <CartesianGrid strokeDasharray="3 3" stroke="#334155" />
+                                    <XAxis dataKey="date" stroke="#94a3b8" style={{ fontSize: '12px' }} />
+                                    <YAxis stroke="#94a3b8" style={{ fontSize: '12px' }} />
+                                    <Tooltip
+                                        contentStyle={{ backgroundColor: '#1e293b', border: '1px solid #334155', borderRadius: '8px' }}
+                                        labelStyle={{ color: '#e2e8f0' }}
+                                    />
+                                    <Legend />
+                                    <Bar dataKey="fast_requests" fill="#eab308" name="Fast Path" stackId="a" />
+                                    <Bar dataKey="container_requests" fill="#3b82f6" name="Container" stackId="a" />
+                                </BarChart>
+                            </ResponsiveContainer>
+                        </div>
+                    )}
+                </>
+            )}
 
             {/* Token Usage Over Time */}
             <div className="bg-slate-900/50 border border-slate-800 rounded-xl p-6">

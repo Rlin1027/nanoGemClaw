@@ -181,6 +181,19 @@ export function createAnalyticsRouter(deps: AnalyticsRouterDeps): Router {
         }
     });
 
+    // GET /api/analytics/fast-path
+    router.get('/analytics/fast-path', async (req, res) => {
+        try {
+            const { getFastPathComparison } = await import('../db.js');
+            const days = parseInt(req.query.days as string) || 30;
+            res.json({ data: getFastPathComparison(days) });
+        } catch {
+            res
+                .status(500)
+                .json({ error: 'Failed to fetch fast path analytics' });
+        }
+    });
+
     // GET /api/analytics/error-rate
     router.get('/analytics/error-rate', async (req, res) => {
         try {

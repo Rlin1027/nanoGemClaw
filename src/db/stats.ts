@@ -151,6 +151,71 @@ export function getUsageByGroup(since?: string): UsageByGroupEntry[] {
   return db.prepare(query).all(...params) as UsageByGroupEntry[];
 }
 
+/** Compare fast path vs container execution metrics */
+export function getFastPathComparison(days: number = 30): {
+  fastPath: { requests: number; avgDurationMs: number; totalTokens: number };
+  container: { requests: number; avgDurationMs: number; totalTokens: number };
+  timeseries: Array<{
+    date: string;
+    fast_requests: number;
+    container_requests: number;
+    fast_avg_ms: number;
+    container_avg_ms: number;
+  }>;
+} {
+  const db = getDatabase();
+  const sinceArg = `-${days} days`;
+
+  const fastPath = db
+    .prepare(
+      `SELECT COUNT(*) as requests,
+            COALESCE(AVG(duration_ms), 0) as avgDurationMs,
+            COALESCE(SUM(prompt_tokens + response_tokens), 0) as totalTokens
+       FROM usage_stats
+       WHERE model LIKE 'fast:%' AND timestamp >= datetime('now', ?)`,
+    )
+    .get(sinceArg) as any;
+
+  const container = db
+    .prepare(
+      `SELECT COUNT(*) as requests,
+            COALESCE(AVG(duration_ms), 0) as avgDurationMs,
+            COALESCE(SUM(prompt_tokens + response_tokens), 0) as totalTokens
+       FROM usage_stats
+       WHERE (model IS NULL OR model NOT LIKE 'fast:%') AND timestamp >= datetime('now', ?)`,
+    )
+    .get(sinceArg) as any;
+
+  const timeseries = db
+    .prepare(
+      `SELECT
+        date(timestamp) as date,
+        SUM(CASE WHEN model LIKE 'fast:%' THEN 1 ELSE 0 END) as fast_requests,
+        SUM(CASE WHEN model IS NULL OR model NOT LIKE 'fast:%' THEN 1 ELSE 0 END) as container_requests,
+        COALESCE(AVG(CASE WHEN model LIKE 'fast:%' THEN duration_ms END), 0) as fast_avg_ms,
+        COALESCE(AVG(CASE WHEN model IS NULL OR model NOT LIKE 'fast:%' THEN duration_ms END), 0) as container_avg_ms
+      FROM usage_stats
+      WHERE timestamp >= datetime('now', ?)
+      GROUP BY date(timestamp)
+      ORDER BY date ASC`,
+    )
+    .all(sinceArg) as any[];
+
+  return {
+    fastPath: {
+      requests: fastPath?.requests ?? 0,
+      avgDurationMs: Math.round(fastPath?.avgDurationMs ?? 0),
+      totalTokens: fastPath?.totalTokens ?? 0,
+    },
+    container: {
+      requests: container?.requests ?? 0,
+      avgDurationMs: Math.round(container?.avgDurationMs ?? 0),
+      totalTokens: container?.totalTokens ?? 0,
+    },
+    timeseries: timeseries ?? [],
+  };
+}
+
 /** Get usage timeseries data for charts (daily aggregation) */
 export function getUsageTimeseriesDaily(days: number = 30): Array<{
   date: string;
